@@ -2,7 +2,7 @@
 // @name         Kimi Quota Compass
 // @name:zh-CN   Kimi 用量罗盘
 // @namespace    https://github.com/JasonWenTheFox
-// @version      0.5.2
+// @version      0.5.3
 // @description  Kimi membership quota panel: monthly pool, Kimi Code 5h/7d windows, per-action ledger with calibrated value estimates
 // @description:zh-CN  Kimi 会员用量面板：月度额度池、Kimi Code 5小时/7天窗口、逐条额度流水（含可校准的金额估算）
 // @author       JW
@@ -36,12 +36,12 @@
     w5h: { zh: "Code 5 小时窗口", en: "Code 5h window" },
     w7d: { zh: "Code 7 天窗口", en: "Code 7d window" },
     precise: { zh: "精确 {v}", en: "precise {v}" },
-    resetAt: { zh: "重置时间：{v}", en: "Resets: {v}" },
+    resetAt: { zh: "重置时间：{v}（本地时区）", en: "Resets: {v} (local)" },
     estUsed: { zh: "估算已用 {v}", en: "est. used {v}" },
     ofWhich: { zh: "其中", en: "of which" },
     estShort: { zh: "估算 {v}", en: "est. {v}" },
     ledger: { zh: "额度流水（官方服务端数据）", en: "Balance actions (official server data)" },
-    thTime: { zh: "时间 (UTC)", en: "Time (UTC)" },
+    thTime: { zh: "时间（本地时区）", en: "Time (local)" },
     thFeature: { zh: "功能", en: "Feature" },
     thTitle: { zh: "条目", en: "Title" },
     thUsed: { zh: "消耗", en: "Used" },
@@ -205,6 +205,15 @@
   }
 
   const pct = (r) => ((r ?? 0) * 100).toFixed(2) + "%";
+  // API 返回的是 UTC 时间，展示时转换为用户本地时区
+  const fmtLocal = (iso, withSec = false) => {
+    if (!iso) return "-";
+    const d = new Date(iso);
+    if (isNaN(d)) return "-";
+    const p = (x) => String(x).padStart(2, "0");
+    const base = d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+    return withSec ? base + ":" + p(d.getSeconds()) : base;
+  };
   const stripFeature = (f) => String(f || "").replace(/^FEATURE_/, "");
 
   // ---------- panel ----------
@@ -278,7 +287,7 @@
     const rows = (actions.actions || []).slice(0, 50).map((a) => {
       const r = a.items?.[0]?.amountRatio;
       return `<tr>
-        <td>${a.timestamp?.slice(0, 19).replace("T", " ")}</td>
+        <td>${fmtLocal(a.timestamp, true)}</td>
         <td>${stripFeature(a.feature)}</td>
         <td style="font-family:inherit">${(a.title || "").slice(0, 44)}</td>
         <td>${r != null ? pct(r) : "0%"}</td>
@@ -308,11 +317,11 @@
         <div class="kqc-card"><div class="kqc-label">${t("w5h")}</div>
           <div class="kqc-value">${pct(r5)}</div>
           <div class="kqc-label" style="margin-top:2px">${t("estUsed", { v: fmtMoney(r5 * 0.04 * poolValue) + " / " + fmtMoney(0.04 * poolValue) })}</div>
-          <div class="kqc-label" style="margin-top:2px">${t("resetAt", { v: h5?.resetTime?.slice(5, 16).replace("T", " ") || stats?.ratelimitCode5h?.resetTime?.slice(5, 16).replace("T", " ") || "-" })}</div></div>
+          <div class="kqc-label" style="margin-top:2px">${t("resetAt", { v: fmtLocal(h5?.resetTime || stats?.ratelimitCode5h?.resetTime).slice(5) })}</div></div>
         <div class="kqc-card"><div class="kqc-label">${t("w7d")}</div>
           <div class="kqc-value">${pct(r7)}</div>
           <div class="kqc-label" style="margin-top:2px">${t("estUsed", { v: fmtMoney(r7 * 0.2 * poolValue) + " / " + fmtMoney(0.2 * poolValue) })}</div>
-          <div class="kqc-label" style="margin-top:2px">${t("resetAt", { v: weekly?.resetTime?.slice(5, 16).replace("T", " ") || stats?.ratelimitCode7d?.resetTime?.slice(5, 16).replace("T", " ") || "-" })}</div></div>
+          <div class="kqc-label" style="margin-top:2px">${t("resetAt", { v: fmtLocal(weekly?.resetTime || stats?.ratelimitCode7d?.resetTime).slice(5) })}</div></div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
         <div style="font-weight:600;font-size:13px">${t("ledger")}</div>
