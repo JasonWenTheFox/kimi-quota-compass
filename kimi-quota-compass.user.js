@@ -2,7 +2,7 @@
 // @name         Kimi Quota Compass
 // @name:zh-CN   Kimi 用量罗盘
 // @namespace    https://github.com/JasonWenTheFox
-// @version      0.7.0
+// @version      0.7.1
 // @description  Kimi membership quota panel: monthly pool, Kimi Code 5h/7d windows, per-action ledger with calibrated PAYG-equivalent estimates
 // @description:zh-CN  Kimi 会员用量面板：月度额度池、Kimi Code 5小时/7天窗口、逐条额度流水（含可校准的 PAYG 等价估算）
 // @author       JW
@@ -280,8 +280,14 @@
     const r7 = stats?.ratelimitCode7d?.ratio ?? 0;
 
     // 月度分类：官方 Code 比例 + 本地非 Code 累计（避免 Code 双重计入）
-    const FEAT_NAMES = { CODING: "Code", CHAT: "Chat", AGENT: "Agent", SWARM: "Swarm" };
-    const featName = (f) => FEAT_NAMES[f] || f;
+    // 已知分类用固定显示名；未知分类通用转 Title Case（如 DEEP_RESEARCH→Deep Research）
+    const FEAT_NAMES = { CODING: "Code", CHAT: "Chat", AGENT: "Agent", SWARM: "Swarm", SLIDES: LANG === "zh" ? "PPT" : "Slides" };
+    const titleCase = (x) => x.toLowerCase().replace(/(^|\s)([a-z])/g, (m, a, b) => a + b.toUpperCase());
+    const featName = (f) => {
+      const raw = String(f || "");
+      if (FEAT_NAMES[raw]) return FEAT_NAMES[raw];
+      return titleCase(raw.replace(/_/g, " "));
+    };
     const cycEntries = cycleStart ? entries.filter((e) => e.timestamp >= cycleStart) : entries.slice();
     const codeOfficial = bal && bal.kimiCodeUsedRatio != null ? bal.kimiCodeUsedRatio : null;
     let codeLocal = 0;
