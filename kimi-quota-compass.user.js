@@ -2,7 +2,7 @@
 // @name         Kimi Quota Compass
 // @name:zh-CN   Kimi 用量罗盘
 // @namespace    https://github.com/JasonWenTheFox
-// @version      0.6.0
+// @version      0.6.1
 // @description  Kimi membership quota panel: monthly pool, Kimi Code 5h/7d windows, per-action ledger with calibrated value estimates
 // @description:zh-CN  Kimi 会员用量面板：月度额度池、Kimi Code 5小时/7天窗口、逐条额度流水（含可校准的金额估算）
 // @author       JW
@@ -64,7 +64,7 @@
   };
   const t = (k, vars) => {
     let s = (T[k] && (T[k][LANG] || T[k].en)) || k;
-    if (vars) for (const v of Object.values(vars)) s = s.replace("{v}", v);
+    if (vars) for (const [kk, vv] of Object.entries(vars)) s = s.split("{" + kk + "}").join(String(vv));
     return s;
   };
 
@@ -288,7 +288,7 @@
     .kqc-table td { padding:6px 8px; border-bottom:1px solid #f0f0f0; font-family:monospace; }
     .kqc-close { cursor:pointer; font-size:26px; color:#999; line-height:1; }
     .kqc-tip { position:relative; display:inline-block; color:#e02020; font-weight:bold; cursor:help; margin-left:4px; }
-    .kqc-tipbox { display:none; position:absolute; left:0; top:22px; z-index:10002; width:420px;
+    .kqc-tipbox { display:none; position:absolute; right:0; top:22px; z-index:10002; width:420px;
       background:#333; color:#fff; font-size:12px; font-weight:normal; line-height:1.7;
       padding:12px 14px; border-radius:8px; box-shadow:0 6px 24px rgba(0,0,0,.4); }
     .kqc-tip:hover .kqc-tipbox { display:block; }
