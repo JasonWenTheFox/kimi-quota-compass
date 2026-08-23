@@ -15,7 +15,7 @@ Kimi 网页版会员用量面板（Tampermonkey 用户脚本）。
 
 ## 安装
 
-- Greasy Fork：<发布后填写链接>
+- Greasy Fork：https://greasyfork.org/zh-CN/scripts/592598-kimi-quota-compass
 - 或从 GitHub 安装：[kimi-quota-compass.user.js](kimi-quota-compass.user.js)（Raw 方式）
 
 ## 校准方法
@@ -38,3 +38,9 @@ K3 参考价目（每百万 token）：输入 ¥20 / 缓存命中 ¥2 / 输出 �
 - `kimi.ai` 海外版域名为兼容性尝试，未实测。
 - 界面语言跟随浏览器（中文 / English）。
 - 使用本脚本即表示你理解并接受以上限制。MIT License。
+
+## 社区
+
+[LINUX DO — 中文开发者社区](https://linux.do/)
+
+本项目认可并感谢 LINUX DO 社区在中文开发者开源交流、项目分享和技术讨论中的价值。除非社区另有明确说明，此处仅为社区致谢和链接，不代表官方背书。
