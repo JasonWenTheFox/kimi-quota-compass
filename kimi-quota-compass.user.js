@@ -2,9 +2,9 @@
 // @name         Kimi Quota Compass
 // @name:zh-CN   Kimi 用量罗盘
 // @namespace    https://github.com/JasonWenTheFox
-// @version      0.6.1
-// @description  Kimi membership quota panel: monthly pool, Kimi Code 5h/7d windows, per-action ledger with calibrated value estimates
-// @description:zh-CN  Kimi 会员用量面板：月度额度池、Kimi Code 5小时/7天窗口、逐条额度流水（含可校准的金额估算）
+// @version      0.7.0
+// @description  Kimi membership quota panel: monthly pool, Kimi Code 5h/7d windows, per-action ledger with calibrated PAYG-equivalent estimates
+// @description:zh-CN  Kimi 会员用量面板：月度额度池、Kimi Code 5小时/7天窗口、逐条额度流水（含可校准的 PAYG 等价估算）
 // @author       JW
 // @match        https://www.kimi.com/*
 // @match        https://kimi.com/*
@@ -30,17 +30,20 @@
     btn: { zh: "Kimi 用量", en: "Kimi Usage" },
     title: { zh: "Kimi 用量罗盘", en: "Kimi Quota Compass" },
     monthlyUsed: { zh: "月度额度池已用", en: "Monthly pool used" },
-    ofWhichCode: { zh: "其中 Kimi Code", en: "of which Kimi Code" },
     localStats: { zh: "本地累计 {n} 条，自 {d}（仅本浏览器）", en: "Local ledger: {n} entries since {d} (this browser only)" },
     notCaptured: { zh: "插件未捕获", en: "Not captured" },
-    ledgerAll: { zh: "额度流水（本地累计，官方数据）", en: "Balance actions (local accumulation, official data)" },
-    poolValue: { zh: "月度额度池总值", en: "Monthly pool total value" },
+    official: { zh: "官方", en: "official" },
+    local: { zh: "本地", en: "local" },
+    poolValue: { zh: "月池 PAYG 等价值", en: "Monthly pool PAYG-equivalent" },
     poolUsed: { zh: "本月已用约 {v}（估算）", en: "used this month ~{v} (estimate)" },
+    calibDefault: { zh: "参考默认值（未校准）", en: "Reference default (not calibrated)" },
+    calibUser: { zh: "用户校准值", en: "User-calibrated" },
+    caliber: { zh: "校准口径：K3-256K", en: "Calibrated for: K3-256K" },
+    k3oneM: { zh: "K3 1M 等价 ≈ {v}（官方称约 2× 额度消耗）", en: "K3 1M equivalent ≈ {v} (official: ~2× quota use)" },
     w5h: { zh: "Code 5 小时窗口", en: "Code 5h window" },
     w7d: { zh: "Code 7 天窗口", en: "Code 7d window" },
-    precise: { zh: "精确 {v}", en: "precise {v}" },
+    quotaUnits: { zh: "{u} / {l}（内部额度单位）· 剩余 {r}", en: "{u} / {l} (internal quota units) · {r} left" },
     resetAt: { zh: "重置时间：{v}（本地时区）", en: "Resets: {v} (local)" },
-    estUsed: { zh: "估算已用 {v}", en: "est. used {v}" },
     ofWhich: { zh: "其中", en: "of which" },
     estShort: { zh: "估算 {v}", en: "est. {v}" },
     ledger: { zh: "额度流水（本地累计，官方数据）", en: "Balance actions (local accumulation, official data)" },
@@ -49,17 +52,21 @@
     thTitle: { zh: "条目", en: "Title" },
     thUsed: { zh: "消耗", en: "Used" },
     thEst: { zh: "估算金额", en: "Est. amount" },
-    estNote: { zh: "以下金额均为估算值，非官方账单", en: "Amounts are estimates, not official billing" },
+    estNote: { zh: "金额均为按校准系数换算的估算值，非官方账单", en: "Amounts are estimates from the calibration constant, not official billing" },
+    canary: {
+      zh: "检测到 Kimi 网页响应开始返回 Token Usage，请检查插件更新",
+      en: "Token usage detected in Kimi web responses - check for script updates",
+    },
     footer: {
-      zh: "额度流水来自 Kimi 服务器，接口单次最多返回 20 条；插件在打开 Kimi 页面时自动抓取并每 30 分钟轮询一次，按记录 id 去重后累积保存在本浏览器 IndexedDB 中（不跨设备同步）。分类占比为本地累计结果；\"插件未捕获\"为官方月度总量与本地累计之差（插件安装前的历史，或长时间未打开 Kimi 页面导致的漏抓）。仅\"月度额度池总值\"与币种设置保存在 localStorage（kqc_* 键）。所有金额均为按校准系数换算的估算值，非官方账单。",
-      en: "Balance actions come from Kimi's server; the API returns at most 20 entries per call. This script auto-captures on page load and polls every 30 minutes, deduplicating by record id and accumulating into this browser's IndexedDB (not synced across devices). Per-feature ratios are local accumulations; \"Not captured\" is the official monthly total minus the local sum (history before install, or gaps when no Kimi page was open). Only the monthly pool total value and currency are stored in localStorage (kqc_* keys). All amounts are estimates, not official billing.",
+      zh: "额度流水来自 Kimi 服务器，接口单次最多返回约 20 条；插件在打开 Kimi 页面时自动抓取、页面切回时立即抓取、前台期间每 5 分钟轮询，按记录 id 去重后累积保存在本浏览器 IndexedDB（不跨设备同步，长时间不打开 Kimi 页面仍可能漏抓）。分类中 Code 使用官方比例，其余为本地累计；\"插件未捕获\"为官方月度总量减去官方 Code 与本地非 Code 之和（安装前历史或漏抓）。5h/7d 窗口的 used/limit 为 Kimi 内部额度单位，非 Token。月池 PAYG 等价值与币种存于 localStorage（kqc_* 键）。所有金额均为估算，非官方账单。",
+      en: "Balance actions come from Kimi's server (about 20 entries per call at most). This script captures on page load, on tab refocus, and every 5 minutes while visible, deduplicating by record id into this browser's IndexedDB (not synced across devices; gaps possible if no Kimi page is open for long). Code ratio is official; other features are local sums; \"Not captured\" = official monthly total - official Code - local non-Code (pre-install history or missed captures). 5h/7d used/limit are Kimi internal quota units, not tokens. Pool value and currency are stored in localStorage (kqc_* keys). All amounts are estimates, not official billing.",
     },
     loading: { zh: "加载中…", en: "loading..." },
     err: { zh: "KQC 错误", en: "KQC error" },
     noLogin: { zh: "未找到 access_token，请先登录 Kimi", en: "access_token not found (not logged in?)" },
     tipBody: {
-      zh: `<b>校准方法</b>：找一次已知成本的请求（你本地统计工具里任意一条，能看到输入/输出/缓存 token），用下方价目算出它的等效成本，再在本面板流水中找到该请求对应的消耗百分比，然后：<br><code>池子总值 = 请求成本 ÷ 消耗比例</code><br>例：成本 ¥3.72 的请求扣了 0.24% → 总值 = 3.72 / 0.0024 ≈ ¥1550。<br><br><b>K3 参考价目（每百万 token）</b>：输入 ¥20 / 缓存命中 ¥2 / 输出 ¥100（$3 / $0.3 / $15）。<br>缓存命中约节省 10 倍。不同模型/功能的池子倍率可能不同，建议用与你主要用途同类的请求来校准。官方接口只返回百分比，一切绝对金额都是估算。`,
-      en: `<b>Calibration</b>: take one request with known cost (any entry in your local stats tool showing input/output/cache tokens), compute its cost with the price table below, find its drain percentage in the ledger, then:<br><code>pool total = request cost ÷ drain ratio</code><br>e.g. cost $0.526, drained 0.24% → total = 0.526 / 0.0024 ≈ $219.<br><br><b>K3 reference pricing (per 1M tokens)</b>: input $3 / cache-read $0.3 / output $15 (¥20 / ¥2 / ¥100).<br>Cache reads save ~10x. Pool drain rates may differ per model/feature; calibrate with a request similar to your main workload. The official API only exposes percentages; all absolute amounts are estimates.`,
+      zh: `<b>这是什么？</b>官方接口只提供百分比。"月池 PAYG 等价值"是把一次<b>已知成本的请求</b>与其额度扣减比例对照反推出的<b>估算值</b>，不是官方余额：<br><code>等价值 = 请求成本 ÷ 消耗比例</code><br>例：成本 ¥3.72 的请求扣了 0.24% → 等价值 ≈ ¥1550。<br><br><b>K3 公开 API 价目（按每 100 万 token 计价，与上下文长度版本无关）</b>：缓存命中 ¥2 / 缓存未命中 ¥20 / 输出 ¥100（$0.3 / $3 / $15）。k3-256k 没有单独的公开价目；会员额度池中，完整版 k3 的消耗官方约为 k3-256k 的 2 倍。缓存命中约节省 10 倍。<br><br>不同模型/功能倍率不同，建议用与你主要用途同类的请求校准。官方接口只返回百分比，一切绝对金额都是估算。`,
+      en: `<b>What is this?</b> Official APIs only expose percentages. The "PAYG-equivalent value" is an <b>estimate</b> reverse-engineered by matching one request of known cost against its quota drain ratio - not an official balance:<br><code>equivalent = request cost ÷ drain ratio</code><br>e.g. cost $0.526, drained 0.24% → ≈ $219.<br><br><b>Public K3 API pricing (per 1M tokens billed, regardless of context-length variant)</b>: cache hit $0.3 / cache miss $3 / output $15 (¥2 / ¥20 / ¥100). k3-256k has no separate public price; inside the membership pool, full k3 officially consumes about 2x the quota of k3-256k. Cache hits save ~10x.<br><br>Rates differ per model/feature; calibrate with a request similar to your main workload. All absolute amounts are estimates.`,
     },
   };
   const t = (k, vars) => {
@@ -67,129 +74,78 @@
     if (vars) for (const [kk, vv] of Object.entries(vars)) s = s.split("{" + kk + "}").join(String(vv));
     return s;
   };
+  // 所有进入 innerHTML 的服务端动态字符串必须先转义
+  const esc = (s) =>
+    String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  // ---------- stream observers (kept for future-proofing; web chat streams verified to carry no usage) ----------
-  pageWindow.__KQC = { records: [], log: [], counts: { asyncIter: 0, getReader: 0, arrayBuffer: 0, text: 0, json: 0 } };
+  // ---------- debug state ----------
+  pageWindow.__KQC = { log: [], streamUsageDetected: false };
   const debug = (msg) => {
     pageWindow.__KQC.log.push(`${new Date().toISOString()} ${msg}`);
     if (pageWindow.__KQC.log.length > 200) pageWindow.__KQC.log.shift();
   };
 
-  const num = (s) => (s == null ? 0 : Number(s) || 0);
-  const extractUsage = (usageJson) => {
-    const pick = (names) => {
-      for (const n of names) {
-        const m = usageJson.match(new RegExp(`"${n}"\\s*:\\s*"?([0-9]+(?:\\.[0-9]+)?)"?`));
-        if (m) return m[1];
-      }
-      return null;
-    };
-    const prompt = pick(["prompt_tokens", "promptTokens", "input_tokens", "inputTokens"]);
-    const completion = pick(["completion_tokens", "completionTokens", "output_tokens", "outputTokens"]);
-    const cached = pick(["cached_tokens", "cachedTokens", "cache_read_tokens"]);
-    const total = pick(["total_tokens", "totalTokens"]);
-    if (prompt == null && completion == null && total == null) return null;
-    return { prompt: num(prompt), completion: num(completion), cached: num(cached), total: num(total) };
-  };
-  const processStreamText = (text) => {
-    const usageRe = /"usage"\s*:\s*\{[^{}]*\}/g;
-    let m;
-    while ((m = usageRe.exec(text))) {
-      const u = extractUsage(m[0]);
-      if (!u) continue;
-      const modelM = text.match(/"model"\s*:\s*"([^"]+)"/);
-      try {
-        const recs = JSON.parse(pageWindow.localStorage.getItem("kqc_usage_records_v1") || "[]");
-        recs.push({ t: Date.now(), model: modelM ? modelM[1] : "", ...u });
-        pageWindow.localStorage.setItem("kqc_usage_records_v1", JSON.stringify(recs.slice(-5000)));
-      } catch {}
-      pageWindow.__KQC.records.push({ ...u });
-    }
-  };
+  // ---------- official APIs ----------
+  const origFetch = pageWindow.fetch.bind(pageWindow);
+  async function apiPost(path, body = {}) {
+    const token = pageWindow.localStorage.getItem("access_token");
+    if (!token) throw new Error(t("noLogin"));
+    const res = await origFetch(path, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + token },
+      body: JSON.stringify(body),
+      credentials: "include",
+    });
+    if (res.status === 401) throw new Error(t("noLogin") + " (401)");
+    return res.json();
+  }
 
+  // ---------- stream usage canary (fail-open, fetch-only) ----------
+  // 目的：监视 Kimi 将来是否开始在网页响应中返回逐请求 token usage。
+  // 只包装 window.fetch，用 response.clone() 旁路检查，不改动返回给页面的对象；
+  // 任何异常都吞掉（fail-open）。注意：Kimi 前端可能持有自己的 fetch 引用，
+  // 因此该探针是尽力而为，不保证覆盖所有请求。
+  const USAGE_FIELD_RE =
+    /"(?:prompt_tokens|promptTokens|input_tokens|inputTokens|completion_tokens|completionTokens|output_tokens|outputTokens|cached_tokens|cachedTokens|cache_read_tokens)"/;
+  const CANARY_MAX = 200000;
+  const markStreamUsage = (text) => {
+    if (pageWindow.__KQC.streamUsageDetected) return;
+    pageWindow.__KQC.streamUsageDetected = true;
+    const fields = [...new Set((text.match(/"[A-Za-z_]*[Tt]okens?"/g) || []).slice(0, 10))];
+    console.warn("[KQC] Token usage detected in Kimi web response. Fields:", fields.join(", "));
+    debug("stream usage DETECTED: " + fields.join(","));
+  };
   try {
-    const RSProto = pageWindow.ReadableStream.prototype;
-    const streamNotes = new WeakMap();
-    const noteChunk = (stream, value) => {
-      if (!value || !value.length) return;
-      let n = streamNotes.get(stream);
-      if (!n) {
-        n = { dec: new TextDecoder(), acc: "", bytes: 0 };
-        streamNotes.set(stream, n);
-      }
-      n.bytes += value.length;
-      n.acc += n.dec.decode(value, { stream: true });
-      if (n.acc.length > 300000) n.acc = n.acc.slice(-150000);
+    pageWindow.fetch = function (...args) {
+      const p = origFetch.apply(this, args);
+      try {
+        const url = typeof args[0] === "string" ? args[0] : args[0] && args[0].url ? args[0].url : "";
+        if (!/kimi\.(com|ai)\/(apiv2|v2|api)\//.test(url)) return p;
+        p.then((res) => {
+          if (!res || !res.ok || !res.body || res.body.locked) return;
+          const ct = (res.headers && res.headers.get("content-type")) || "";
+          if (!/json|connect|event-stream/i.test(ct)) return;
+          const mirror = res.clone();
+          const rd = mirror.body.getReader();
+          const dec = new TextDecoder();
+          let acc = "";
+          const pump = (v) => {
+            if (v.done) {
+              if (USAGE_FIELD_RE.test(acc)) markStreamUsage(acc);
+              return;
+            }
+            acc += dec.decode(v.value, { stream: true });
+            if (acc.length > CANARY_MAX) acc = acc.slice(-Math.floor(CANARY_MAX / 2));
+            return rd.read().then(pump);
+          };
+          rd.read().then(pump).catch(() => {});
+        }).catch(() => {});
+      } catch {}
+      return p;
     };
-    const finalizeStream = (stream) => {
-      const n = streamNotes.get(stream);
-      if (!n) return;
-      streamNotes.delete(stream);
-      if (n.acc.indexOf("usage") >= 0) processStreamText(n.acc);
-    };
-    const hookIteratorSource = (orig) =>
-      function (...args) {
-        pageWindow.__KQC.counts.asyncIter++;
-        const it = orig.apply(this, args);
-        const stream = this;
-        const origNext = it.next.bind(it);
-        it.next = async function () {
-          const r = await origNext();
-          if (r && r.done) finalizeStream(stream);
-          else if (r && r.value) noteChunk(stream, r.value);
-          return r;
-        };
-        return it;
-      };
-    if (typeof RSProto.values === "function") RSProto.values = hookIteratorSource(RSProto.values);
-    if (RSProto[Symbol.asyncIterator] && RSProto[Symbol.asyncIterator] !== RSProto.values)
-      RSProto[Symbol.asyncIterator] = hookIteratorSource(RSProto[Symbol.asyncIterator]);
-    const origGetReader = RSProto.getReader;
-    RSProto.getReader = function (...args) {
-      pageWindow.__KQC.counts.getReader++;
-      const reader = origGetReader.apply(this, args);
-      const stream = this;
-      const origRead = reader.read.bind(reader);
-      reader.read = async function (...a) {
-        const r = await origRead(...a);
-        if (r && r.done) finalizeStream(stream);
-        else if (r && r.value) noteChunk(stream, r.value);
-        return r;
-      };
-      return reader;
-    };
-    const RespProto = pageWindow.Response.prototype;
-    const origAB = RespProto.arrayBuffer;
-    RespProto.arrayBuffer = function (...args) {
-      pageWindow.__KQC.counts.arrayBuffer++;
-      return origAB.apply(this, args).then((buf) => {
-        try {
-          if (buf && buf.byteLength > 0) {
-            const txt = new TextDecoder().decode(new Uint8Array(buf));
-            if (txt.indexOf("usage") >= 0) processStreamText(txt);
-          }
-        } catch {}
-        return buf;
-      });
-    };
-    const origText = RespProto.text;
-    RespProto.text = function (...args) {
-      pageWindow.__KQC.counts.text++;
-      return origText.apply(this, args).then((txt) => {
-        try {
-          if (txt && txt.indexOf("usage") >= 0) processStreamText(txt);
-        } catch {}
-        return txt;
-      });
-    };
-    const origJson = RespProto.json;
-    RespProto.json = function (...args) {
-      pageWindow.__KQC.counts.json++;
-      return origJson.apply(this, args);
-    };
-    debug("observer hooks installed (page realm)");
+    debug("usage canary installed (fetch-only, fail-open)");
   } catch (e) {
-    debug("hook err: " + e);
+    debug("canary err: " + e);
   }
 
   // ---------- local ledger store (IndexedDB, dedup by id) ----------
@@ -222,33 +178,30 @@
     });
   }
 
-  // ---------- official APIs ----------
-  const origFetch = pageWindow.fetch.bind(pageWindow);
-  async function apiPost(path, body = {}) {
-    const token = pageWindow.localStorage.getItem("access_token");
-    if (!token) throw new Error(t("noLogin"));
-    const res = await origFetch(path, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: "Bearer " + token },
-      body: JSON.stringify(body),
-      credentials: "include",
-    });
-    if (res.status === 401) throw new Error(t("noLogin") + " (401)");
-    return res.json();
-  }
-
   const pct = (r) => ((r ?? 0) * 100).toFixed(2) + "%";
+  const stripFeature = (f) => String(f || "").replace(/^FEATURE_/, "");
   const normAction = (a) => ({
     id: a.id,
     feature: stripFeature(a.feature),
     title: a.title || "",
     timestamp: a.timestamp,
-    ratio: a.items?.[0]?.amountRatio ?? 0,
+    // 观测样本中每个 action 恰好一个 item；多 item 的求和语义未经官方确认，
+    // 故稳健地取首个 item，缺失时记 0（如未来出现多 item 需重新评估）。
+    ratio: a.items && a.items[0] ? Number(a.items[0].amountRatio) || 0 : 0,
   });
-  // 拉取流水并按 id 去重合并进本地库；返回是否成功
-  async function captureLedger() {
+
+  // 抓取流水（带最小间隔节流，避免多事件短时间内重复请求）
+  let lastCapture = 0;
+  const CAPTURE_MIN_MS = 45 * 1000;
+  async function captureLedger(force = false) {
+    const now = Date.now();
+    if (!force && now - lastCapture < CAPTURE_MIN_MS) return false;
+    lastCapture = now;
     try {
-      const resp = await apiPost("/apiv2/kimi.gateway.membership.v2.MembershipService/ListBalanceActions", { pageSize: 200 });
+      const resp = await apiPost(
+        "/apiv2/kimi.gateway.membership.v2.MembershipService/ListBalanceActions",
+        { pageSize: 200 },
+      );
       const acts = resp.actions || [];
       await dbPutAll(acts.map(normAction));
       debug("ledger captured: " + acts.length);
@@ -258,16 +211,17 @@
       return false;
     }
   }
+
   // API 返回的是 UTC 时间，展示时转换为用户本地时区
   const fmtLocal = (iso, withSec = false) => {
     if (!iso) return "-";
     const d = new Date(iso);
     if (isNaN(d)) return "-";
     const p = (x) => String(x).padStart(2, "0");
-    const base = d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+    const base =
+      d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
     return withSec ? base + ":" + p(d.getSeconds()) : base;
   };
-  const stripFeature = (f) => String(f || "").replace(/^FEATURE_/, "");
 
   // ---------- panel ----------
   GM_addStyle(`
@@ -295,14 +249,17 @@
     .kqc-tipbox code { background:#555; padding:1px 5px; border-radius:4px; }
     .kqc-est { font-size:11px; color:#999; }
     .kqc-foot { font-size:11px; color:#999; margin-top:10px; line-height:1.6; }
+    .kqc-canary { background:#fff3cd; border:1px solid #f0d47a; color:#856404; border-radius:8px;
+      padding:10px 12px; font-size:12px; margin-bottom:14px; }
   `);
 
   const POOL_CNY_KEY = "kqc_pool_value_cny";
   const POOL_USD_KEY = "kqc_pool_value_usd";
   const CUR_KEY = "kqc_currency";
+  const poolKey = (cur) => (cur === "USD" ? POOL_USD_KEY : POOL_CNY_KEY);
   const getPoolValue = (cur) =>
-    Number(pageWindow.localStorage.getItem(cur === "USD" ? POOL_USD_KEY : POOL_CNY_KEY)) ||
-    (cur === "USD" ? 225 : 1600);
+    Number(pageWindow.localStorage.getItem(poolKey(cur))) || (cur === "USD" ? 225 : 1600);
+  const poolIsUserSet = (cur) => pageWindow.localStorage.getItem(poolKey(cur)) != null;
   const getCur = () => (pageWindow.localStorage.getItem(CUR_KEY) === "USD" ? "USD" : "CNY");
 
   function renderPanel(stats, usages, entries, cycleStart) {
@@ -315,29 +272,50 @@
     const n = (x) => Number(x || 0);
     const cur = getCur();
     const poolValue = getPoolValue(cur);
+    const userSet = poolIsUserSet(cur);
     const sym = cur === "USD" ? "$" : "¥";
     const fmtMoney = (v) => sym + Number(v).toFixed(2);
     const usedEst = bal ? fmtMoney(bal.amountUsedRatio * poolValue) : "-";
     const r5 = stats?.ratelimitCode5h?.ratio ?? 0;
     const r7 = stats?.ratelimitCode7d?.ratio ?? 0;
-    // 分类命名统一；全部使用本地累计（按记录 id 去重后的全量流水），周期内过滤
+
+    // 月度分类：官方 Code 比例 + 本地非 Code 累计（避免 Code 双重计入）
     const FEAT_NAMES = { CODING: "Code", CHAT: "Chat", AGENT: "Agent", SWARM: "Swarm" };
     const featName = (f) => FEAT_NAMES[f] || f;
-    const cycEntries = cycleStart
-      ? entries.filter((e) => e.timestamp >= cycleStart)
-      : entries.slice();
+    const cycEntries = cycleStart ? entries.filter((e) => e.timestamp >= cycleStart) : entries.slice();
+    const codeOfficial = bal && bal.kimiCodeUsedRatio != null ? bal.kimiCodeUsedRatio : null;
+    let codeLocal = 0;
     const featSums = {};
     for (const e of cycEntries) {
+      if (String(e.feature).toUpperCase() === "CODING") {
+        codeLocal += e.ratio || 0;
+        continue;
+      }
       const key = featName(e.feature);
       featSums[key] = (featSums[key] || 0) + (e.ratio || 0);
     }
-    const featOrder = ["Code", "Chat", "Agent", "Swarm"];
-    const featKeys = [...featOrder.filter((k) => featSums[k] != null), ...Object.keys(featSums).filter((k) => !featOrder.includes(k))];
-    const listedSum = featKeys.reduce((acc, k) => acc + featSums[k], 0);
-    if (bal && bal.amountUsedRatio != null && listedSum < bal.amountUsedRatio - 1e-9) {
-      const otherKey = t("notCaptured");
-      featSums[otherKey] = bal.amountUsedRatio - listedSum;
-      featKeys.push(otherKey);
+    const featOrder = ["Chat", "Agent", "Swarm"];
+    const featKeys = [
+      ...featOrder.filter((k) => featSums[k] != null),
+      ...Object.keys(featSums).filter((k) => !featOrder.includes(k)),
+    ];
+    const localNonCodeSum = featKeys.reduce((acc, k) => acc + featSums[k], 0);
+    const codeVal = codeOfficial != null ? codeOfficial : codeLocal;
+    const codeTag = codeOfficial != null ? t("official") : t("local");
+    const featLines = [];
+    featLines.push(
+      `<div class="kqc-label" style="margin-top:2px">${t("ofWhich")} Code <b>${pct(codeVal)}</b>（${esc(codeTag)}）${LANG === "zh" ? "，" : ", "}${t("estShort", { v: fmtMoney(codeVal * poolValue) })}</div>`,
+    );
+    for (const k of featKeys)
+      featLines.push(
+        `<div class="kqc-label" style="margin-top:2px">${esc(k)} <b>${pct(featSums[k])}</b>${LANG === "zh" ? "，" : ", "}${t("estShort", { v: fmtMoney(featSums[k] * poolValue) })}</div>`,
+      );
+    if (bal && bal.amountUsedRatio != null) {
+      const notCaptured = bal.amountUsedRatio - codeVal - localNonCodeSum;
+      if (notCaptured > 1e-9)
+        featLines.push(
+          `<div class="kqc-label" style="margin-top:2px">${esc(t("notCaptured"))} <b>${pct(notCaptured)}</b>${LANG === "zh" ? "，" : ", "}${t("estShort", { v: fmtMoney(notCaptured * poolValue) })}</div>`,
+        );
     }
     const earliest = entries.length
       ? entries.reduce((m, e) => (e.timestamp < m ? e.timestamp : m), entries[0].timestamp)
@@ -345,32 +323,38 @@
     const localStatsLine = entries.length
       ? `<div class="kqc-label" style="margin-top:6px">${t("localStats", { n: entries.length, d: fmtLocal(earliest) })}</div>`
       : "";
-    const featLines = featKeys
-      .map((k, i) => {
-        const first = i === 0;
-        const line = `${first ? t("ofWhich") + " " : ""}${k} <b>${pct(featSums[k])}</b>${LANG === "zh" ? "，" : ", "}${t("estShort", { v: fmtMoney(featSums[k] * poolValue) })}`;
-        return `<div class="kqc-label" style="margin-top:2px">${line}</div>`;
-      })
-      .join("");
+    const featLinesHtml = featLines.join("");
 
     const sorted = cycEntries.slice().sort((x, y) => (x.timestamp < y.timestamp ? 1 : -1));
-    const rows = sorted.slice(0, 300).map((a) => `<tr>
+    const rows = sorted
+      .slice(0, 300)
+      .map(
+        (a) => `<tr>
         <td>${fmtLocal(a.timestamp, true)}</td>
-        <td>${featName(a.feature)}</td>
-        <td style="font-family:inherit">${(a.title || "").slice(0, 44)}</td>
+        <td>${esc(featName(a.feature))}</td>
+        <td style="font-family:inherit">${esc(String(a.title || "").slice(0, 44))}</td>
         <td>${pct(a.ratio)}</td>
         <td>${fmtMoney(a.ratio * poolValue)}</td>
-      </tr>`).join("");
+      </tr>`,
+      )
+      .join("");
+
+    const canaryBanner = pageWindow.__KQC.streamUsageDetected
+      ? `<div class="kqc-canary">⚠ ${esc(t("canary"))}</div>`
+      : "";
+    const win5Line = h5 ? t("quotaUnits", { u: n(h5.used), l: n(h5.limit), r: n(h5.remaining) }) : "";
+    const win7Line = weekly ? t("quotaUnits", { u: n(weekly.used), l: n(weekly.limit), r: n(weekly.remaining) }) : "";
 
     root.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
         <div style="font-size:18px;font-weight:600">${t("title")} v${GM_info.script.version}</div>
         <div class="kqc-close" id="kqc-close">&times;</div>
       </div>
+      ${canaryBanner}
       <div class="kqc-grid">
         <div class="kqc-card"><div class="kqc-label">${t("monthlyUsed")}</div>
           <div class="kqc-value">${bal ? pct(bal.amountUsedRatio) : "-"}${total ? ' <span style="font-weight:400;font-size:12px;color:#666">(' + n(total.used) + "/" + n(total.limit) + ")</span>" : ""}</div>
-          ${featLines}
+          ${featLinesHtml}
           ${localStatsLine}
         </div>
         <div class="kqc-card"><div class="kqc-label">${t("poolValue")}<span class="kqc-tip">!<span class="kqc-tipbox">${t("tipBody")}</span></span></div>
@@ -381,14 +365,16 @@
             </select>
             <input id="kqc-poolval" type="number" step="10" value="${poolValue}" style="width:76px;font-size:13px">
           </div>
-          <div class="kqc-label" style="margin-top:2px">${t("poolUsed", { v: usedEst })}</div></div>
+          <div class="kqc-label" style="margin-top:2px">${userSet ? esc(t("calibUser")) : esc(t("calibDefault"))} · ${esc(t("caliber"))}</div>
+          <div class="kqc-label" style="margin-top:2px">${t("poolUsed", { v: usedEst })}</div>
+          <div class="kqc-label" style="margin-top:2px">${t("k3oneM", { v: fmtMoney(poolValue / 2) })}</div></div>
         <div class="kqc-card"><div class="kqc-label">${t("w5h")}</div>
           <div class="kqc-value">${pct(r5)}</div>
-          <div class="kqc-label" style="margin-top:2px">${t("estUsed", { v: fmtMoney(r5 * 0.04 * poolValue) + " / " + fmtMoney(0.04 * poolValue) })}</div>
+          ${win5Line ? `<div class="kqc-label" style="margin-top:2px">${win5Line}</div>` : ""}
           <div class="kqc-label" style="margin-top:2px">${t("resetAt", { v: fmtLocal(h5?.resetTime || stats?.ratelimitCode5h?.resetTime).slice(5) })}</div></div>
         <div class="kqc-card"><div class="kqc-label">${t("w7d")}</div>
           <div class="kqc-value">${pct(r7)}</div>
-          <div class="kqc-label" style="margin-top:2px">${t("estUsed", { v: fmtMoney(r7 * 0.2 * poolValue) + " / " + fmtMoney(0.2 * poolValue) })}</div>
+          ${win7Line ? `<div class="kqc-label" style="margin-top:2px">${win7Line}</div>` : ""}
           <div class="kqc-label" style="margin-top:2px">${t("resetAt", { v: fmtLocal(weekly?.resetTime || stats?.ratelimitCode7d?.resetTime).slice(5) })}</div></div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
@@ -409,7 +395,7 @@
       pv.onchange = () => {
         const v = Number(pv.value);
         if (v > 0) {
-          pageWindow.localStorage.setItem(cur === "USD" ? POOL_USD_KEY : POOL_CNY_KEY, String(v));
+          pageWindow.localStorage.setItem(poolKey(cur), String(v));
           run();
         }
       };
@@ -425,7 +411,7 @@
     const btn = document.getElementById("kqc-btn");
     btn.innerText = t("loading");
     try {
-      await captureLedger();
+      await captureLedger(true);
       const [stats, entriesRaw, sub] = await Promise.all([
         apiPost("/apiv2/kimi.gateway.membership.v2.MembershipService/GetSubscriptionStats"),
         dbGetAll().catch(() => []),
@@ -458,9 +444,13 @@
     const root = document.createElement("div");
     root.id = "kqc-root";
     document.body.appendChild(root);
-    // 打开页面即静默抓一次，之后每 30 分钟轮询（仅当页面开着）
-    captureLedger();
-    setInterval(captureLedger, 30 * 60 * 1000);
+    // 抓取时机：页面打开立即、切回页面立即（focus / visibilitychange）、前台每 5 分钟
+    captureLedger(true);
+    setInterval(() => captureLedger(), 5 * 60 * 1000);
+    pageWindow.addEventListener("focus", () => captureLedger());
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") captureLedger();
+    });
   };
 
   if (document.body) boot();
