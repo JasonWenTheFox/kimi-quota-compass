@@ -2,7 +2,7 @@
 // @name         Kimi Quota Compass
 // @name:zh-CN   Kimi 用量罗盘
 // @namespace    https://github.com/JasonWenTheFox
-// @version      0.5.4
+// @version      0.6.0
 // @description  Kimi membership quota panel: monthly pool, Kimi Code 5h/7d windows, per-action ledger with calibrated value estimates
 // @description:zh-CN  Kimi 会员用量面板：月度额度池、Kimi Code 5小时/7天窗口、逐条额度流水（含可校准的金额估算）
 // @author       JW
@@ -31,6 +31,9 @@
     title: { zh: "Kimi 用量罗盘", en: "Kimi Quota Compass" },
     monthlyUsed: { zh: "月度额度池已用", en: "Monthly pool used" },
     ofWhichCode: { zh: "其中 Kimi Code", en: "of which Kimi Code" },
+    localStats: { zh: "本地累计 {n} 条，自 {d}（仅本浏览器）", en: "Local ledger: {n} entries since {d} (this browser only)" },
+    notCaptured: { zh: "插件未捕获", en: "Not captured" },
+    ledgerAll: { zh: "额度流水（本地累计，官方数据）", en: "Balance actions (local accumulation, official data)" },
     poolValue: { zh: "月度额度池总值", en: "Monthly pool total value" },
     poolUsed: { zh: "本月已用约 {v}（估算）", en: "used this month ~{v} (estimate)" },
     w5h: { zh: "Code 5 小时窗口", en: "Code 5h window" },
@@ -40,7 +43,7 @@
     estUsed: { zh: "估算已用 {v}", en: "est. used {v}" },
     ofWhich: { zh: "其中", en: "of which" },
     estShort: { zh: "估算 {v}", en: "est. {v}" },
-    ledger: { zh: "额度流水（官方服务端数据）", en: "Balance actions (official server data)" },
+    ledger: { zh: "额度流水（本地累计，官方数据）", en: "Balance actions (local accumulation, official data)" },
     thTime: { zh: "时间（本地时区）", en: "Time (local)" },
     thFeature: { zh: "功能", en: "Feature" },
     thTitle: { zh: "条目", en: "Title" },
@@ -48,8 +51,8 @@
     thEst: { zh: "估算金额", en: "Est. amount" },
     estNote: { zh: "以下金额均为估算值，非官方账单", en: "Amounts are estimates, not official billing" },
     footer: {
-      zh: "额度流水来自 Kimi 服务器（账号级）：换设备、卸载重装插件均不受影响，安装插件之前的历史同样会显示。接口可能仅返回近期流水，因此分类占比（Code 除外）为近期汇总，\"其他（历史）\"为月度总量与已列分类之差。仅\"月度额度池总值\"与币种设置保存在本地浏览器（localStorage 的 kqc_* 键，清除即重置）。所有金额均为按校准系数换算的估算值，非官方账单。",
-      en: "Balance actions come from Kimi's server (account level): unaffected by device or reinstall; history before installing this script is included. The API may return only recent actions, so per-feature ratios (except Code) are recent sums, and \"Other (history)\" is the difference between the official monthly total and the listed features. Only the monthly pool total value and currency are stored locally (localStorage kqc_* keys). All amounts are estimates, not official billing.",
+      zh: "额度流水来自 Kimi 服务器，接口单次最多返回 20 条；插件在打开 Kimi 页面时自动抓取并每 30 分钟轮询一次，按记录 id 去重后累积保存在本浏览器 IndexedDB 中（不跨设备同步）。分类占比为本地累计结果；\"插件未捕获\"为官方月度总量与本地累计之差（插件安装前的历史，或长时间未打开 Kimi 页面导致的漏抓）。仅\"月度额度池总值\"与币种设置保存在 localStorage（kqc_* 键）。所有金额均为按校准系数换算的估算值，非官方账单。",
+      en: "Balance actions come from Kimi's server; the API returns at most 20 entries per call. This script auto-captures on page load and polls every 30 minutes, deduplicating by record id and accumulating into this browser's IndexedDB (not synced across devices). Per-feature ratios are local accumulations; \"Not captured\" is the official monthly total minus the local sum (history before install, or gaps when no Kimi page was open). Only the monthly pool total value and currency are stored in localStorage (kqc_* keys). All amounts are estimates, not official billing.",
     },
     loading: { zh: "加载中…", en: "loading..." },
     err: { zh: "KQC 错误", en: "KQC error" },
@@ -189,6 +192,36 @@
     debug("hook err: " + e);
   }
 
+  // ---------- local ledger store (IndexedDB, dedup by id) ----------
+  const idb = pageWindow.indexedDB;
+  const DB_NAME = "kqc_ledger", STORE = "actions";
+  const dbOpen = () =>
+    new Promise((res, rej) => {
+      const r = idb.open(DB_NAME, 1);
+      r.onupgradeneeded = () => r.result.createObjectStore(STORE, { keyPath: "id" });
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  async function dbPutAll(entries) {
+    if (!entries.length) return;
+    const db = await dbOpen();
+    await new Promise((res, rej) => {
+      const tx = db.transaction(STORE, "readwrite");
+      const st = tx.objectStore(STORE);
+      for (const e of entries) st.put(e);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+  async function dbGetAll() {
+    const db = await dbOpen();
+    return new Promise((res, rej) => {
+      const rq = db.transaction(STORE, "readonly").objectStore(STORE).getAll();
+      rq.onsuccess = () => res(rq.result || []);
+      rq.onerror = () => rej(rq.error);
+    });
+  }
+
   // ---------- official APIs ----------
   const origFetch = pageWindow.fetch.bind(pageWindow);
   async function apiPost(path, body = {}) {
@@ -205,6 +238,26 @@
   }
 
   const pct = (r) => ((r ?? 0) * 100).toFixed(2) + "%";
+  const normAction = (a) => ({
+    id: a.id,
+    feature: stripFeature(a.feature),
+    title: a.title || "",
+    timestamp: a.timestamp,
+    ratio: a.items?.[0]?.amountRatio ?? 0,
+  });
+  // 拉取流水并按 id 去重合并进本地库；返回是否成功
+  async function captureLedger() {
+    try {
+      const resp = await apiPost("/apiv2/kimi.gateway.membership.v2.MembershipService/ListBalanceActions", { pageSize: 200 });
+      const acts = resp.actions || [];
+      await dbPutAll(acts.map(normAction));
+      debug("ledger captured: " + acts.length);
+      return true;
+    } catch (e) {
+      debug("captureLedger err: " + e);
+      return false;
+    }
+  }
   // API 返回的是 UTC 时间，展示时转换为用户本地时区
   const fmtLocal = (iso, withSec = false) => {
     if (!iso) return "-";
@@ -252,7 +305,7 @@
     (cur === "USD" ? 225 : 1600);
   const getCur = () => (pageWindow.localStorage.getItem(CUR_KEY) === "USD" ? "USD" : "CNY");
 
-  function renderPanel(stats, actions, usages) {
+  function renderPanel(stats, usages, entries, cycleStart) {
     const root = document.getElementById("kqc-root");
     const bal = stats && stats.subscriptionBalance;
     const coding = usages && usages.usages && usages.usages[0];
@@ -267,24 +320,31 @@
     const usedEst = bal ? fmtMoney(bal.amountUsedRatio * poolValue) : "-";
     const r5 = stats?.ratelimitCode5h?.ratio ?? 0;
     const r7 = stats?.ratelimitCode7d?.ratio ?? 0;
-    // per-feature drain: Code from official ratio; Chat/Agent/others summed from ledger
-    // 分类命名统一（CODING→Code 等）；Code 以官方比例为准，其余由近期流水汇总
+    // 分类命名统一；全部使用本地累计（按记录 id 去重后的全量流水），周期内过滤
     const FEAT_NAMES = { CODING: "Code", CHAT: "Chat", AGENT: "Agent", SWARM: "Swarm" };
     const featName = (f) => FEAT_NAMES[f] || f;
+    const cycEntries = cycleStart
+      ? entries.filter((e) => e.timestamp >= cycleStart)
+      : entries.slice();
     const featSums = {};
-    for (const a of actions.actions || []) {
-      const key = featName(stripFeature(a.feature));
-      featSums[key] = (featSums[key] || 0) + (a.items?.[0]?.amountRatio || 0);
+    for (const e of cycEntries) {
+      const key = featName(e.feature);
+      featSums[key] = (featSums[key] || 0) + (e.ratio || 0);
     }
-    if (bal && bal.kimiCodeUsedRatio != null) featSums["Code"] = bal.kimiCodeUsedRatio;
     const featOrder = ["Code", "Chat", "Agent", "Swarm"];
     const featKeys = [...featOrder.filter((k) => featSums[k] != null), ...Object.keys(featSums).filter((k) => !featOrder.includes(k))];
     const listedSum = featKeys.reduce((acc, k) => acc + featSums[k], 0);
     if (bal && bal.amountUsedRatio != null && listedSum < bal.amountUsedRatio - 1e-9) {
-      const otherKey = LANG === "zh" ? "其他（历史）" : "Other (history)";
+      const otherKey = t("notCaptured");
       featSums[otherKey] = bal.amountUsedRatio - listedSum;
       featKeys.push(otherKey);
     }
+    const earliest = entries.length
+      ? entries.reduce((m, e) => (e.timestamp < m ? e.timestamp : m), entries[0].timestamp)
+      : null;
+    const localStatsLine = entries.length
+      ? `<div class="kqc-label" style="margin-top:6px">${t("localStats", { n: entries.length, d: fmtLocal(earliest) })}</div>`
+      : "";
     const featLines = featKeys
       .map((k, i) => {
         const first = i === 0;
@@ -293,16 +353,14 @@
       })
       .join("");
 
-    const rows = (actions.actions || []).slice(0, 50).map((a) => {
-      const r = a.items?.[0]?.amountRatio;
-      return `<tr>
+    const sorted = cycEntries.slice().sort((x, y) => (x.timestamp < y.timestamp ? 1 : -1));
+    const rows = sorted.slice(0, 300).map((a) => `<tr>
         <td>${fmtLocal(a.timestamp, true)}</td>
-        <td>${stripFeature(a.feature)}</td>
+        <td>${featName(a.feature)}</td>
         <td style="font-family:inherit">${(a.title || "").slice(0, 44)}</td>
-        <td>${r != null ? pct(r) : "0%"}</td>
-        <td>${r != null ? fmtMoney(r * poolValue) : fmtMoney(0)}</td>
-      </tr>`;
-    }).join("");
+        <td>${pct(a.ratio)}</td>
+        <td>${fmtMoney(a.ratio * poolValue)}</td>
+      </tr>`).join("");
 
     root.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -313,6 +371,7 @@
         <div class="kqc-card"><div class="kqc-label">${t("monthlyUsed")}</div>
           <div class="kqc-value">${bal ? pct(bal.amountUsedRatio) : "-"}${total ? ' <span style="font-weight:400;font-size:12px;color:#666">(' + n(total.used) + "/" + n(total.limit) + ")</span>" : ""}</div>
           ${featLines}
+          ${localStatsLine}
         </div>
         <div class="kqc-card"><div class="kqc-label">${t("poolValue")}<span class="kqc-tip">!<span class="kqc-tipbox">${t("tipBody")}</span></span></div>
           <div class="kqc-value" style="font-size:13px;font-weight:400">
@@ -366,8 +425,12 @@
     const btn = document.getElementById("kqc-btn");
     btn.innerText = t("loading");
     try {
-      const stats = await apiPost("/apiv2/kimi.gateway.membership.v2.MembershipService/GetSubscriptionStats");
-      const actions = await apiPost("/apiv2/kimi.gateway.membership.v2.MembershipService/ListBalanceActions", { pageSize: 200 });
+      await captureLedger();
+      const [stats, entriesRaw, sub] = await Promise.all([
+        apiPost("/apiv2/kimi.gateway.membership.v2.MembershipService/GetSubscriptionStats"),
+        dbGetAll().catch(() => []),
+        apiPost("/apiv2/kimi.gateway.membership.v2.MembershipService/GetSubscription").catch(() => null),
+      ]);
       let usages = null;
       try {
         usages = await apiPost("/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages", {
@@ -376,7 +439,8 @@
       } catch (e) {
         debug("GetUsages err: " + e);
       }
-      renderPanel(stats, actions, usages);
+      const cycleStart = sub?.subscription?.currentStartTime || null;
+      renderPanel(stats, usages, entriesRaw, cycleStart);
     } catch (e) {
       alert(t("err") + ": " + e.message);
     } finally {
@@ -394,6 +458,9 @@
     const root = document.createElement("div");
     root.id = "kqc-root";
     document.body.appendChild(root);
+    // 打开页面即静默抓一次，之后每 30 分钟轮询（仅当页面开着）
+    captureLedger();
+    setInterval(captureLedger, 30 * 60 * 1000);
   };
 
   if (document.body) boot();
