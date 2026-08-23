@@ -2,7 +2,7 @@
 // @name         Kimi Quota Compass
 // @name:zh-CN   Kimi 用量罗盘
 // @namespace    https://github.com/JasonWenTheFox
-// @version      0.5.3
+// @version      0.5.4
 // @description  Kimi membership quota panel: monthly pool, Kimi Code 5h/7d windows, per-action ledger with calibrated value estimates
 // @description:zh-CN  Kimi 会员用量面板：月度额度池、Kimi Code 5小时/7天窗口、逐条额度流水（含可校准的金额估算）
 // @author       JW
@@ -48,8 +48,8 @@
     thEst: { zh: "估算金额", en: "Est. amount" },
     estNote: { zh: "以下金额均为估算值，非官方账单", en: "Amounts are estimates, not official billing" },
     footer: {
-      zh: "额度流水来自 Kimi 服务器（账号级）：换设备、卸载重装插件均不受影响，安装插件之前的历史同样会显示。仅\"池子校准值\"与币种设置保存在本地浏览器（localStorage 的 kqc_* 键，清除即重置）。所有金额均为按校准系数换算的估算值，非官方账单。",
-      en: "Balance actions come from Kimi's server (account level): unaffected by device or reinstall; history before installing this script is included. Only the monthly pool total value and currency are stored locally (localStorage kqc_* keys). All amounts are estimates from the calibration constant, not official billing.",
+      zh: "额度流水来自 Kimi 服务器（账号级）：换设备、卸载重装插件均不受影响，安装插件之前的历史同样会显示。接口可能仅返回近期流水，因此分类占比（Code 除外）为近期汇总，\"其他（历史）\"为月度总量与已列分类之差。仅\"月度额度池总值\"与币种设置保存在本地浏览器（localStorage 的 kqc_* 键，清除即重置）。所有金额均为按校准系数换算的估算值，非官方账单。",
+      en: "Balance actions come from Kimi's server (account level): unaffected by device or reinstall; history before installing this script is included. The API may return only recent actions, so per-feature ratios (except Code) are recent sums, and \"Other (history)\" is the difference between the official monthly total and the listed features. Only the monthly pool total value and currency are stored locally (localStorage kqc_* keys). All amounts are estimates, not official billing.",
     },
     loading: { zh: "加载中…", en: "loading..." },
     err: { zh: "KQC 错误", en: "KQC error" },
@@ -268,19 +268,28 @@
     const r5 = stats?.ratelimitCode5h?.ratio ?? 0;
     const r7 = stats?.ratelimitCode7d?.ratio ?? 0;
     // per-feature drain: Code from official ratio; Chat/Agent/others summed from ledger
+    // 分类命名统一（CODING→Code 等）；Code 以官方比例为准，其余由近期流水汇总
+    const FEAT_NAMES = { CODING: "Code", CHAT: "Chat", AGENT: "Agent", SWARM: "Swarm" };
+    const featName = (f) => FEAT_NAMES[f] || f;
     const featSums = {};
     for (const a of actions.actions || []) {
-      const f = stripFeature(a.feature);
-      featSums[f] = (featSums[f] || 0) + (a.items?.[0]?.amountRatio || 0);
+      const key = featName(stripFeature(a.feature));
+      featSums[key] = (featSums[key] || 0) + (a.items?.[0]?.amountRatio || 0);
     }
     if (bal && bal.kimiCodeUsedRatio != null) featSums["Code"] = bal.kimiCodeUsedRatio;
-    const featOrder = ["Code", "Chat", "Agent"];
+    const featOrder = ["Code", "Chat", "Agent", "Swarm"];
     const featKeys = [...featOrder.filter((k) => featSums[k] != null), ...Object.keys(featSums).filter((k) => !featOrder.includes(k))];
+    const listedSum = featKeys.reduce((acc, k) => acc + featSums[k], 0);
+    if (bal && bal.amountUsedRatio != null && listedSum < bal.amountUsedRatio - 1e-9) {
+      const otherKey = LANG === "zh" ? "其他（历史）" : "Other (history)";
+      featSums[otherKey] = bal.amountUsedRatio - listedSum;
+      featKeys.push(otherKey);
+    }
     const featLines = featKeys
       .map((k, i) => {
         const first = i === 0;
-        const zh = `${first ? t("ofWhich") + " " : ""}${k} <b>${pct(featSums[k])}</b>${LANG === "zh" ? "，" : ", "}${t("estShort", { v: fmtMoney(featSums[k] * poolValue) })}`;
-        return `<div class="kqc-label" style="margin-top:2px">${zh}</div>`;
+        const line = `${first ? t("ofWhich") + " " : ""}${k} <b>${pct(featSums[k])}</b>${LANG === "zh" ? "，" : ", "}${t("estShort", { v: fmtMoney(featSums[k] * poolValue) })}`;
+        return `<div class="kqc-label" style="margin-top:2px">${line}</div>`;
       })
       .join("");
 
@@ -358,7 +367,7 @@
     btn.innerText = t("loading");
     try {
       const stats = await apiPost("/apiv2/kimi.gateway.membership.v2.MembershipService/GetSubscriptionStats");
-      const actions = await apiPost("/apiv2/kimi.gateway.membership.v2.MembershipService/ListBalanceActions");
+      const actions = await apiPost("/apiv2/kimi.gateway.membership.v2.MembershipService/ListBalanceActions", { pageSize: 200 });
       let usages = null;
       try {
         usages = await apiPost("/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages", {
