@@ -2,9 +2,9 @@
 // @name         Kimi Quota Compass
 // @name:zh-CN   Kimi 用量罗盘
 // @namespace    https://github.com/JasonWenTheFox
-// @version      0.7.1
-// @description  Kimi membership quota panel: monthly pool, Kimi Code 5h/7d windows, per-action ledger with calibrated PAYG-equivalent estimates
-// @description:zh-CN  Kimi 会员用量面板：月度额度池、Kimi Code 5小时/7天窗口、逐条额度流水（含可校准的 PAYG 等价估算）
+// @version      0.8.0
+// @description  Kimi membership quota panel: monthly pool, Kimi Code 5h/7d windows, per-action ledger with full-cycle backfill, cycle snapshots and CSV/JSON export
+// @description:zh-CN  Kimi 会员用量面板：月度额度池、Kimi Code 5小时/7天窗口、逐条额度流水（支持全周期回填、周期快照与导出）
 // @author       JW
 // @match        https://www.kimi.com/*
 // @match        https://kimi.com/*
@@ -34,39 +34,47 @@
     notCaptured: { zh: "插件未捕获", en: "Not captured" },
     official: { zh: "官方", en: "official" },
     local: { zh: "本地", en: "local" },
-    poolValue: { zh: "月池 PAYG 等价值", en: "Monthly pool PAYG-equivalent" },
-    poolUsed: { zh: "本月已用约 {v}（估算）", en: "used this month ~{v} (estimate)" },
-    calibDefault: { zh: "参考默认值（未校准）", en: "Reference default (not calibrated)" },
-    calibUser: { zh: "用户校准值", en: "User-calibrated" },
-    caliber: { zh: "校准口径：K3-256K", en: "Calibrated for: K3-256K" },
-    k3oneM: { zh: "K3 1M 等价 ≈ {v}（官方称约 2× 额度消耗）", en: "K3 1M equivalent ≈ {v} (official: ~2× quota use)" },
+    completeness: { zh: "本周期数据完整度 {v}", en: "Cycle completeness {v}" },
+    rateNote: { zh: "¥/1% 校准", en: "¥ per 1%" },
+    rateHint: {
+      zh: "按公开 API 牌价折算：Kimi Code 每 1% 约 ¥21，网页/Work 类每 1% 约 ¥3–9（实测）。金额均为估算，非官方账单。",
+      en: "Converted with public API prices: ~¥21 per 1% for Kimi Code, ~¥3–9 per 1% for web/Work features (measured). Estimates only, not official billing.",
+    },
     w5h: { zh: "Code 5 小时窗口", en: "Code 5h window" },
     w7d: { zh: "Code 7 天窗口", en: "Code 7d window" },
     quotaUnits: { zh: "{u} / {l}（内部额度单位）· 剩余 {r}", en: "{u} / {l} (internal quota units) · {r} left" },
     resetAt: { zh: "重置时间：{v}（本地时区）", en: "Resets: {v} (local)" },
     ofWhich: { zh: "其中", en: "of which" },
     estShort: { zh: "估算 {v}", en: "est. {v}" },
-    ledger: { zh: "额度流水（本地累计，官方数据）", en: "Balance actions (local accumulation, official data)" },
+    ledger: { zh: "额度流水", en: "Balance actions" },
     thTime: { zh: "时间（本地时区）", en: "Time (local)" },
     thFeature: { zh: "功能", en: "Feature" },
     thTitle: { zh: "条目", en: "Title" },
     thUsed: { zh: "消耗", en: "Used" },
     thEst: { zh: "估算金额", en: "Est. amount" },
-    estNote: { zh: "金额均为按校准系数换算的估算值，非官方账单", en: "Amounts are estimates from the calibration constant, not official billing" },
+    cycle: { zh: "计费周期", en: "Cycle" },
+    cycleAll: { zh: "全部", en: "All" },
+    cycleEndValue: { zh: "官方终值 {v}", en: "official end {v}" },
+    exportJson: { zh: "导出 JSON", en: "Export JSON" },
+    exportCsv: { zh: "导出 CSV", en: "Export CSV" },
+    refreshBtn: { zh: "刷新", en: "Refresh" },
+    loadMore: { zh: "显示更多", en: "Show more" },
+    shownRows: { zh: "显示 {a} / {b} 条", en: "Showing {a} / {b}" },
     canary: {
       zh: "检测到 Kimi 网页响应开始返回 Token Usage，请检查插件更新",
       en: "Token usage detected in Kimi web responses - check for script updates",
     },
     footer: {
-      zh: "额度流水来自 Kimi 服务器，接口单次最多返回约 20 条；插件在打开 Kimi 页面时自动抓取、页面切回时立即抓取、前台期间每 5 分钟轮询，按记录 id 去重后累积保存在本浏览器 IndexedDB（不跨设备同步，长时间不打开 Kimi 页面仍可能漏抓）。分类中 Code 使用官方比例，其余为本地累计；\"插件未捕获\"为官方月度总量减去官方 Code 与本地非 Code 之和（安装前历史或漏抓）。5h/7d 窗口的 used/limit 为 Kimi 内部额度单位，非 Token。月池 PAYG 等价值与币种存于 localStorage（kqc_* 键）。所有金额均为估算，非官方账单。",
-      en: "Balance actions come from Kimi's server (about 20 entries per call at most). This script captures on page load, on tab refocus, and every 5 minutes while visible, deduplicating by record id into this browser's IndexedDB (not synced across devices; gaps possible if no Kimi page is open for long). Code ratio is official; other features are local sums; \"Not captured\" = official monthly total - official Code - local non-Code (pre-install history or missed captures). 5h/7d used/limit are Kimi internal quota units, not tokens. Pool value and currency are stored in localStorage (kqc_* keys). All amounts are estimates, not official billing.",
+      zh: "流水来自 Kimi 服务器（每页 20 条，插件已按 pageToken 自动翻页回填）。服务端只保留当前计费周期，历史只能靠本地累积，因此每周期会写入一份官方快照。5h/7d 的 used/limit 为内部额度单位，非 Token。金额为按公开牌价折算的估算值。",
+      en: "Actions come from Kimi's server (20 per page; the script follows pageToken to backfill). The server keeps only the current cycle, so cycles are snapshotted locally. 5h/7d used/limit are internal quota units, not tokens. Amounts are estimates at public list prices.",
     },
     loading: { zh: "加载中…", en: "loading..." },
     err: { zh: "KQC 错误", en: "KQC error" },
     noLogin: { zh: "未找到 access_token，请先登录 Kimi", en: "access_token not found (not logged in?)" },
+    exported: { zh: "已导出 {n} 条流水、{m} 条快照", en: "Exported {n} actions, {m} snapshots" },
     tipBody: {
-      zh: `<b>这是什么？</b>官方接口只提供百分比。"月池 PAYG 等价值"是把一次<b>已知成本的请求</b>与其额度扣减比例对照反推出的<b>估算值</b>，不是官方余额：<br><code>等价值 = 请求成本 ÷ 消耗比例</code><br>例：成本 ¥3.72 的请求扣了 0.24% → 等价值 ≈ ¥1550。<br><br><b>K3 公开 API 价目（按每 100 万 token 计价，与上下文长度版本无关）</b>：缓存命中 ¥2 / 缓存未命中 ¥20 / 输出 ¥100（$0.3 / $3 / $15）。k3-256k 没有单独的公开价目；会员额度池中，完整版 k3 的消耗官方约为 k3-256k 的 2 倍。缓存命中约节省 10 倍。<br><br>不同模型/功能倍率不同，建议用与你主要用途同类的请求校准。官方接口只返回百分比，一切绝对金额都是估算。`,
-      en: `<b>What is this?</b> Official APIs only expose percentages. The "PAYG-equivalent value" is an <b>estimate</b> reverse-engineered by matching one request of known cost against its quota drain ratio - not an official balance:<br><code>equivalent = request cost ÷ drain ratio</code><br>e.g. cost $0.526, drained 0.24% → ≈ $219.<br><br><b>Public K3 API pricing (per 1M tokens billed, regardless of context-length variant)</b>: cache hit $0.3 / cache miss $3 / output $15 (¥2 / ¥20 / ¥100). k3-256k has no separate public price; inside the membership pool, full k3 officially consumes about 2x the quota of k3-256k. Cache hits save ~10x.<br><br>Rates differ per model/feature; calibrate with a request similar to your main workload. All absolute amounts are estimates.`,
+      zh: `<b>这是什么？</b>官方接口只提供百分比，不提供金额。<br><br><b>换算方式：</b>金额 = 额度百分比 × 每 1% 的 API 等价值。<br>用真实请求反推：Kimi Code 每 1% 约合公开 API 价 ¥21；网页 Agent / Kimi Work 类每 1% 约 ¥3–9（同样 token 量下扣费更高）。<br><br><b>K3 公开 API 价目</b>（每百万 token）：缓存命中 ¥2 / 未命中 ¥20 / 输出 ¥100。k3 在上下文超过 256K 后额度消耗约翻倍。<br><br>不同功能、不同缓存命中率的换算差别很大，全部金额仅为估算。`,
+      en: `<b>What is this?</b> Official APIs only expose percentages, never amounts.<br><br><b>Conversion:</b> amount = quota % × API-equivalent value per 1%.<br>Measured from real requests: ~¥21 per 1% for Kimi Code; ~¥3–9 per 1% for web Agent / Kimi Work (same tokens cost more quota there).<br><br><b>K3 public API pricing</b> (per 1M tokens): cache hit ¥2 / miss ¥20 / output ¥100. k3 roughly doubles quota use above 256K context.<br><br>Rates differ per feature and cache-hit ratio; every amount is an estimate.`,
     },
   };
   const t = (k, vars) => {
@@ -97,8 +105,15 @@
       credentials: "include",
     });
     if (res.status === 401) throw new Error(t("noLogin") + " (401)");
+    if (!res.ok) throw new Error("HTTP " + res.status);
     return res.json();
   }
+  const API = {
+    stats: "/apiv2/kimi.gateway.membership.v2.MembershipService/GetSubscriptionStats",
+    sub: "/apiv2/kimi.gateway.membership.v2.MembershipService/GetSubscription",
+    actions: "/apiv2/kimi.gateway.membership.v2.MembershipService/ListBalanceActions",
+    usages: "/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages",
+  };
 
   // ---------- stream usage canary (fail-open, fetch-only) ----------
   // 目的：监视 Kimi 将来是否开始在网页响应中返回逐请求 token usage。
@@ -148,70 +163,276 @@
     debug("canary err: " + e);
   }
 
-  // ---------- local ledger store (IndexedDB, dedup by id) ----------
+  // ---------- local store ----------
+  // 刻意不升级老库 kqc_ledger 的版本：v0.7.x 的用户库里已有上千条流水，
+  // 升 version 会被其它仍开着的标签页阻塞（onblocked），风险不值当。
+  // actions 继续留 v1；新增的快照/周期表放到独立的 kqc_meta 库里。
   const idb = pageWindow.indexedDB;
-  const DB_NAME = "kqc_ledger", STORE = "actions";
-  const dbOpen = () =>
-    new Promise((res, rej) => {
-      const r = idb.open(DB_NAME, 1);
-      r.onupgradeneeded = () => r.result.createObjectStore(STORE, { keyPath: "id" });
-      r.onsuccess = () => res(r.result);
+  const DB_LEDGER = "kqc_ledger";
+  const DB_META = "kqc_meta";
+  const S_ACTIONS = "actions";
+  const S_SNAPSHOTS = "snapshots";
+  const S_CYCLES = "cycles";
+  const STORE_DB = { [S_ACTIONS]: DB_LEDGER, [S_SNAPSHOTS]: DB_META, [S_CYCLES]: DB_META };
+
+  const openCache = {};
+
+  const NEEDED_STORES = { [DB_LEDGER]: [S_ACTIONS], [DB_META]: [S_SNAPSHOTS, S_CYCLES] };
+
+  function createStores(db, name) {
+    const need = NEEDED_STORES[name] || [];
+    for (const st of need) {
+      if (db.objectStoreNames.contains(st)) continue;
+      if (st === S_ACTIONS) db.createObjectStore(st, { keyPath: "id" });
+      else if (st === S_SNAPSHOTS) db.createObjectStore(st, { keyPath: "ts" }).createIndex("cycle", "cycle");
+      else db.createObjectStore(st, { keyPath: "cycle" });
+    }
+  }
+
+  function rawOpen(name, version) {
+    return new Promise((res, rej) => {
+      const r = version ? idb.open(name, version) : idb.open(name);
+      r.onupgradeneeded = () => createStores(r.result, name);
+      r.onsuccess = () => {
+        const db = r.result;
+        // 其它标签页要求升级时主动让路，避免把别人卡在 onblocked
+        db.onversionchange = () => {
+          try { db.close(); } catch {}
+          delete openCache[name];
+        };
+        res(db);
+      };
       r.onerror = () => rej(r.error);
+      r.onblocked = () => debug("idb blocked: " + name);
     });
-  async function dbPutAll(entries) {
-    if (!entries.length) return;
-    const db = await dbOpen();
-    await new Promise((res, rej) => {
-      const tx = db.transaction(STORE, "readwrite");
-      const st = tx.objectStore(STORE);
-      for (const e of entries) st.put(e);
+  }
+
+  function dbOpenFor(store) {
+    const name = STORE_DB[store] || DB_LEDGER;
+    if (!openCache[name]) {
+      openCache[name] = (async () => {
+        // 先按现有版本打开（新库会在 onupgradeneeded 里建表），
+        // 再检查该库需要的全部 store；缺任何一个才升版本补齐。
+        let db = await rawOpen(name);
+        const need = NEEDED_STORES[name] || [];
+        const missing = need.filter((st) => !db.objectStoreNames.contains(st));
+        if (missing.length) {
+          const next = (db.version || 1) + 1;
+          db.close();
+          db = await rawOpen(name, next);
+        }
+        return db;
+      })().catch((e) => {
+        delete openCache[name]; // 失败不缓存，下次还能重试
+        throw e;
+      });
+    }
+    return openCache[name];
+  }
+
+  async function dbGet(store, key) {
+    const db = await dbOpenFor(store);
+    return new Promise((res, rej) => {
+      const rq = db.transaction(store, "readonly").objectStore(store).get(key);
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    });
+  }
+  async function dbGetAll(store) {
+    const db = await dbOpenFor(store);
+    return new Promise((res, rej) => {
+      const rq = db.transaction(store, "readonly").objectStore(store).getAll();
+      rq.onsuccess = () => res(rq.result || []);
+      rq.onerror = () => rej(rq.error);
+    });
+  }
+  async function dbPut(store, value) {
+    const db = await dbOpenFor(store);
+    return new Promise((res, rej) => {
+      const tx = db.transaction(store, "readwrite");
+      tx.objectStore(store).put(value);
       tx.oncomplete = () => res();
       tx.onerror = () => rej(tx.error);
     });
   }
-  async function dbGetAll() {
-    const db = await dbOpen();
+  async function dbPutAll(entries) {
+    if (!entries.length) return 0;
+    const db = await dbOpenFor(S_ACTIONS);
     return new Promise((res, rej) => {
-      const rq = db.transaction(STORE, "readonly").objectStore(STORE).getAll();
-      rq.onsuccess = () => res(rq.result || []);
-      rq.onerror = () => rej(rq.error);
+      const tx = db.transaction(S_ACTIONS, "readwrite");
+      const st = tx.objectStore(S_ACTIONS);
+      for (const e of entries) st.put(e);
+      tx.oncomplete = () => res(entries.length);
+      tx.onerror = () => rej(tx.error);
     });
   }
 
   const pct = (r) => ((r ?? 0) * 100).toFixed(2) + "%";
   const stripFeature = (f) => String(f || "").replace(/^FEATURE_/, "");
+
+  // 官方前端对撤销/退回的流水不计入消耗；这里按 status 过滤（实测 UNDO 的 ratio 均为 0，
+  // 但语义上不应累计，避免未来出现非零撤销记录时多算）。
   const normAction = (a) => ({
     id: a.id,
     feature: stripFeature(a.feature),
     title: a.title || "",
     timestamp: a.timestamp,
-    // 观测样本中每个 action 恰好一个 item；多 item 的求和语义未经官方确认，
-    // 故稳健地取首个 item，缺失时记 0（如未来出现多 item 需重新评估）。
-    ratio: a.items && a.items[0] ? Number(a.items[0].amountRatio) || 0 : 0,
+    ratio: (a.items && a.items[0] ? Number(a.items[0].amountRatio) || 0 : 0),
+    status: a.status || "DONE",
   });
 
-  // 抓取流水（带最小间隔节流，避免多事件短时间内重复请求）
+  // ---------- capture (paged backfill) ----------
+  // 服务端每页固定 20 条；pageToken 可一直翻到当前计费周期起点。
+  // 每次抓取从最新往前翻，遇到"库里已有的 id"即停，保证增量抓取的成本随新增条数线性增长。
+  const CAPTURE_MIN_MS = 55 * 1000;
+  // 一个完整周期的流水上限实测约 2500 条（Code 高峰期 640 次/天）。
+  // 回填上限取 250 页 = 5000 条，保证"整周期没开页面"也能一次补齐。
+  const MAX_PAGES_INCREMENTAL = 40; // 800 条
+  const MAX_PAGES_BACKFILL = 250; // 5000 条，首次/长时间未开页时使用
+  const LAST_CAPTURE_KEY = "kqc_last_capture";
+  // v0.7.x 的本地历史是稀疏的（只抓首页），升级后必须无条件走一次全量回填，
+  // 否则"遇到已有 id 就停"会永远停在最新那条，旧缺口补不回来。
+  const BACKFILL_DONE_KEY = "kqc_backfill_v2";
+
+  let captureInFlight = null;
   let lastCapture = 0;
-  const CAPTURE_MIN_MS = 45 * 1000;
+
+  async function knownIdsOnPage(acts) {
+    const db = await dbOpenFor(S_ACTIONS);
+    return new Promise((res) => {
+      const out = new Set();
+      if (!acts.length) return res(out);
+      const store = db.transaction(S_ACTIONS, "readonly").objectStore(S_ACTIONS);
+      let pending = acts.length;
+      const done = () => {
+        if (--pending === 0) res(out);
+      };
+      for (const a of acts) {
+        const rq = store.get(a.id);
+        rq.onsuccess = () => {
+          if (rq.result) out.add(a.id);
+          done();
+        };
+        rq.onerror = done;
+      }
+    });
+  }
+
   async function captureLedger(force = false) {
     const now = Date.now();
-    if (!force && now - lastCapture < CAPTURE_MIN_MS) return false;
-    lastCapture = now;
+    if (captureInFlight) return captureInFlight;
+    if (!force && now - lastCapture < CAPTURE_MIN_MS) return 0;
+
+    const lastSeen = Number(pageWindow.localStorage.getItem(LAST_CAPTURE_KEY) || 0);
+    const stale = !lastSeen || now - lastSeen > 30 * 60 * 1000;
+    const needFullBackfill = !pageWindow.localStorage.getItem(BACKFILL_DONE_KEY);
+    const maxPages = stale || needFullBackfill ? MAX_PAGES_BACKFILL : MAX_PAGES_INCREMENTAL;
+
+    captureInFlight = (async () => {
+      let token = null;
+      let pages = 0;
+      let added = 0;
+      try {
+        while (pages < maxPages) {
+          const body = token ? { pageSize: 20, pageToken: token } : { pageSize: 20 };
+          const resp = await apiPost(API.actions, body);
+          const acts = resp.actions || [];
+          if (!acts.length) break;
+
+          const known = await knownIdsOnPage(acts);
+          let hitKnown = false;
+          for (const a of acts) if (known.has(a.id)) hitKnown = true;
+          // 全部 upsert：服务端可能修正同一条记录的状态/金额（如 DONE→UNDO）
+          await dbPutAll(acts.map(normAction));
+          added += acts.length - known.size;
+
+          token = resp.nextPageToken;
+          pages++;
+          if (!token) {
+            if (needFullBackfill) pageWindow.localStorage.setItem(BACKFILL_DONE_KEY, "1");
+            break;
+          }
+          if (hitKnown && !needFullBackfill) break; // 已经追上本地记录
+        }
+        if (pages >= maxPages && token) debug(`backfill truncated at ${pages} pages`);
+        debug(`ledger captured: +${added} in ${pages} page(s)`);
+        pageWindow.localStorage.setItem(LAST_CAPTURE_KEY, String(Date.now()));
+        return added;
+      } catch (e) {
+        debug("captureLedger err: " + e);
+        return added;
+      } finally {
+        lastCapture = Date.now();
+        captureInFlight = null;
+      }
+    })();
+    return captureInFlight;
+  }
+
+  // ---------- snapshots ----------
+  // 官方百分比只有"当下"，重置即消失。每页面加载/刷新都写一条快照（按分钟去重），
+  // 检测到计费周期切换时，把上一个周期的最后一条快照固化为终值。
+  const SNAP_MIN_MS = 60 * 1000;
+  let lastSnapAt = 0;
+
+  async function recordSnapshot(stats, sub) {
+    const bal = stats && stats.subscriptionBalance;
+    if (!bal) return;
+    const startIso = (sub && sub.subscription && sub.subscription.currentStartTime) || "";
+    if (startIso) addCycleStart(startIso);
+    const cycle = cycleOf(startIso || new Date().toISOString()) || "";
+    const minMs = pageWindow.__KQC && pageWindow.__KQC.snapMinMs != null ? pageWindow.__KQC.snapMinMs : SNAP_MIN_MS;
+    const now = Date.now();
+    const cycleChanged = pageWindow.__KQC.lastSnapCycle !== cycle;
+    if (!cycleChanged && now - lastSnapAt < minMs) return;
+    lastSnapAt = now;
+    pageWindow.__KQC.lastSnapCycle = cycle;
+
+    const minute = new Date(now).toISOString().slice(0, 16);
+    const rec = {
+      // 主键带上周期：跨周期同一分钟的两条快照不会互相覆盖
+      ts: cycle ? `${cycle}|${minute}` : minute,
+      minute,
+      cycle,
+      cycleStart: startIso || null,
+      used: Number(bal.amountUsedRatio) || 0,
+      code: Number(bal.kimiCodeUsedRatio) || 0,
+      at: now,
+    };
     try {
-      const resp = await apiPost(
-        "/apiv2/kimi.gateway.membership.v2.MembershipService/ListBalanceActions",
-        { pageSize: 200 },
-      );
-      const acts = resp.actions || [];
-      await dbPutAll(acts.map(normAction));
-      debug("ledger captured: " + acts.length);
-      return true;
+      await dbPut(S_SNAPSHOTS, rec);
+      if (startIso) await closePreviousCycle(startIso);
     } catch (e) {
-      debug("captureLedger err: " + e);
-      return false;
+      debug("snapshot err: " + e);
     }
   }
 
+  async function closePreviousCycle(currentStart) {
+    const snaps = await dbGetAll(S_SNAPSHOTS);
+    if (!snaps.length) return;
+    const starts = [...new Set(snaps.map((s) => s.cycleStart || s.cycle).filter(Boolean))].sort();
+    for (const c of starts) {
+      if (c >= currentStart) continue;
+      const key = cycleKeyOf(c);
+      if (await dbGet(S_CYCLES, key)) continue;
+      const own = snaps
+        .filter((s) => (s.cycleStart || s.cycle) === c)
+        .sort((a, b) => (a.ts < b.ts ? -1 : 1));
+      if (!own.length) continue;
+      const last = own[own.length - 1];
+      await dbPut(S_CYCLES, {
+        cycle: key,
+        cycleStart: c,
+        closedAt: last.ts,
+        used: last.used,
+        code: last.code,
+        samples: own.length,
+      });
+      debug("cycle closed: " + key);
+    }
+  }
+
+  // ---------- display helpers ----------
   // API 返回的是 UTC 时间，展示时转换为用户本地时区
   const fmtLocal = (iso, withSec = false) => {
     if (!iso) return "-";
@@ -223,23 +444,124 @@
     return withSec ? base + ":" + p(d.getSeconds()) : base;
   };
 
+  // 计费周期的权威来源是官方 GetSubscription().currentStartTime；
+  // 只有拿不到官方边界的老数据，才退回"每月 19 日 02:02 UTC"的经验规则。
+  const CYCLE_START_DAY = 19;
+  const CYCLE_START_UTC_H = 2;
+  const CYCLE_START_UTC_M = 2;
+  let cycleStarts = [];
+
+  const cycleKeyOf = (iso) => String(iso || "").slice(0, 10);
+  function setCycleStarts(list) {
+    cycleStarts = [...new Set(list.filter(Boolean))].sort();
+  }
+  function addCycleStart(iso) {
+    if (!iso || cycleStarts.includes(iso)) return;
+    cycleStarts = [...cycleStarts, iso].sort();
+  }
+
+  function ruleCycleOf(isoLike) {
+    const d = new Date(isoLike);
+    if (isNaN(d)) return null;
+    const y = d.getUTCFullYear();
+    const m = d.getUTCMonth();
+    const afterReset =
+      d.getUTCDate() > CYCLE_START_DAY ||
+      (d.getUTCDate() === CYCLE_START_DAY &&
+        (d.getUTCHours() > CYCLE_START_UTC_H ||
+          (d.getUTCHours() === CYCLE_START_UTC_H && d.getUTCMinutes() >= CYCLE_START_UTC_M)));
+    const base = afterReset ? new Date(Date.UTC(y, m, CYCLE_START_DAY)) : new Date(Date.UTC(y, m - 1, CYCLE_START_DAY));
+    return base.toISOString().slice(0, 10);
+  }
+
+  // 落在已知周期起点之后的第一条，决定它属于哪个周期；更早的记录用经验规则兜底
+  function cycleOf(isoLike) {
+    const t = Date.parse(isoLike);
+    if (isNaN(t)) return null;
+    let best = null;
+    for (const s of cycleStarts) {
+      const st = Date.parse(s);
+      if (!isNaN(st) && st <= t) best = s;
+    }
+    return best ? cycleKeyOf(best) : ruleCycleOf(isoLike);
+  }
+
+  const cycleLabel = (key) => {
+    if (!key) return "-";
+    const next = new Date(key + "T00:00:00Z");
+    next.setUTCMonth(next.getUTCMonth() + 1);
+    const f = (d) => `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+    return `${f(new Date(key + "T00:00:00Z"))} – ${f(next)}`;
+  };
+
+  // 功能显示名。WORK 的子服务（Search/Fetch/Media）由 title 体现，不单独分类。
+  const FEAT_NAMES = {
+    CODING: { zh: "Kimi Code", en: "Kimi Code" },
+    WORK: { zh: "Kimi Work", en: "Kimi Work" },
+    WEBSITES: { zh: "网站构建", en: "Websites" },
+    SWARM: { zh: "Agent Swarm", en: "Agent Swarm" },
+    AGENT: { zh: "Agent", en: "Agent" },
+    CHAT: { zh: "Chat", en: "Chat" },
+    MY_KIMI: { zh: "My Kimi", en: "My Kimi" },
+    PLUGIN: { zh: "插件", en: "Plugin" },
+    SLIDES: { zh: "PPT", en: "Slides" },
+    SLIDES_NBP: { zh: "PPT", en: "Slides" },
+    K2D8_PREVIEW: { zh: "K2.8 预览", en: "K2.8 Preview" },
+    CLAW: { zh: "Claw", en: "Claw" },
+  };
+  const titleCase = (x) => x.toLowerCase().replace(/(^|\s)([a-z])/g, (m, a, b) => a + b.toUpperCase());
+  const featName = (f) => {
+    const raw = String(f || "");
+    if (FEAT_NAMES[raw]) return FEAT_NAMES[raw][LANG] || FEAT_NAMES[raw].en;
+    return titleCase(raw.replace(/_/g, " "));
+  };
+
+  // ---------- calibration ----------
+  // 每 1% 月池对应的公开 API 等价值（元）。Code 与网页/Work 类实测差 3–7 倍，分开记。
+  const RATE_CODE_KEY = "kqc_rate_code";
+  const RATE_OTHER_KEY = "kqc_rate_other";
+  const LEGACY_POOL_KEY = "kqc_pool_value_cny";
+  const LEGACY_POOL_USD_KEY = "kqc_pool_value_usd";
+
+  function migrateLegacyRates() {
+    const ls = pageWindow.localStorage;
+    if (ls.getItem(RATE_CODE_KEY) == null) {
+      const cur = ls.getItem("kqc_currency") === "USD" ? "USD" : "CNY";
+      const cny = Number(ls.getItem(LEGACY_POOL_KEY));
+      const usd = Number(ls.getItem(LEGACY_POOL_USD_KEY));
+      let rate = null;
+      // 旧版按 kqc_currency 决定生效的是哪个币种，迁移必须跟随，而不是优先 CNY
+      if (cur === "USD" && usd > 0) rate = (usd * 7.1) / 100;
+      else if (cur === "CNY" && cny > 0) rate = cny / 100;
+      else if (cny > 0) rate = cny / 100;
+      else if (usd > 0) rate = (usd * 7.1) / 100;
+      ls.setItem(RATE_CODE_KEY, String(+(rate != null ? rate : 21).toFixed(2)));
+    }
+    if (ls.getItem(RATE_OTHER_KEY) == null) ls.setItem(RATE_OTHER_KEY, "7");
+  }
+
+  const rateCode = () => Number(pageWindow.localStorage.getItem(RATE_CODE_KEY)) || 21;
+  const rateOther = () => Number(pageWindow.localStorage.getItem(RATE_OTHER_KEY)) || 7;
+  const rateFor = (feat) => (String(feat).toUpperCase() === "CODING" ? rateCode() : rateOther());
+
   // ---------- panel ----------
   GM_addStyle(`
     #kqc-btn { position: fixed; bottom: 20px; right: 20px; z-index: 10000; padding: 10px 20px;
       background: #7c5cff; color: #fff; border: none; border-radius: 8px; cursor: pointer;
       font-weight: 600; font-family: -apple-system, system-ui, sans-serif; }
-    #kqc-root { position: fixed; top: 5%; left: 50%; transform: translateX(-50%); width: 780px;
-      max-height: 90vh; overflow-y: auto; background: #fff; border-radius: 12px;
-      box-shadow: 0 10px 50px rgba(0,0,0,.3); z-index: 10001; padding: 24px; display: none;
+    #kqc-root { position: fixed; top: 4%; left: 50%; transform: translateX(-50%); width: 860px;
+      max-height: 92vh; overflow-y: auto; background: #fff; border-radius: 12px;
+      box-shadow: 0 10px 50px rgba(0,0,0,.3); z-index: 10001; padding: 22px; display: none;
       flex-direction: column; border: 1px solid #e5e5e5; color: #333;
       font-family: -apple-system, system-ui, sans-serif; }
     .kqc-card { background:#f9f9f9; border:1px solid #eee; border-radius:8px; padding:12px; }
-    .kqc-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:18px; }
+    .kqc-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:14px; }
     .kqc-label { font-size:12px; color:#666; margin-bottom:4px; }
     .kqc-value { font-size:15px; font-weight:bold; color:#7c5cff; }
     table.kqc-table { width:100%; border-collapse:collapse; font-size:12px; }
-    .kqc-table th { text-align:left; padding:6px 8px; border-bottom:1px solid #eee; color:#666; background:#f5f5f5; }
-    .kqc-table td { padding:6px 8px; border-bottom:1px solid #f0f0f0; font-family:monospace; }
+    .kqc-table th { text-align:left; padding:6px 8px; border-bottom:1px solid #eee; color:#666; background:#f5f5f5;
+      position:sticky; top:0; }
+    .kqc-table td { padding:5px 8px; border-bottom:1px solid #f0f0f0; font-family:monospace; }
     .kqc-close { cursor:pointer; font-size:26px; color:#999; line-height:1; }
     .kqc-tip { position:relative; display:inline-block; color:#e02020; font-weight:bold; cursor:help; margin-left:4px; }
     .kqc-tipbox { display:none; position:absolute; right:0; top:22px; z-index:10002; width:420px;
@@ -251,18 +573,20 @@
     .kqc-foot { font-size:11px; color:#999; margin-top:10px; line-height:1.6; }
     .kqc-canary { background:#fff3cd; border:1px solid #f0d47a; color:#856404; border-radius:8px;
       padding:10px 12px; font-size:12px; margin-bottom:14px; }
+    .kqc-btn2 { border:1px solid #ddd; background:#fff; border-radius:6px; padding:4px 10px;
+      font-size:12px; cursor:pointer; color:#444; }
+    .kqc-btn2:hover { border-color:#7c5cff; color:#7c5cff; }
+    .kqc-input { width:56px; font-size:12px; padding:2px 4px; border:1px solid #ddd; border-radius:4px; }
+    .kqc-pill { display:inline-block; background:#efeaff; color:#5b40cc; border-radius:10px;
+      padding:1px 8px; font-size:11px; margin-left:6px; }
   `);
 
-  const POOL_CNY_KEY = "kqc_pool_value_cny";
-  const POOL_USD_KEY = "kqc_pool_value_usd";
-  const CUR_KEY = "kqc_currency";
-  const poolKey = (cur) => (cur === "USD" ? POOL_USD_KEY : POOL_CNY_KEY);
-  const getPoolValue = (cur) =>
-    Number(pageWindow.localStorage.getItem(poolKey(cur))) || (cur === "USD" ? 225 : 1600);
-  const poolIsUserSet = (cur) => pageWindow.localStorage.getItem(poolKey(cur)) != null;
-  const getCur = () => (pageWindow.localStorage.getItem(CUR_KEY) === "USD" ? "USD" : "CNY");
+  const state = { entries: [], cycles: {}, viewCycle: null, rows: 300 };
 
-  function renderPanel(stats, usages, entries, cycleStart) {
+  // v 是 0–1 的比例，费率是"元 / 1%"，所以要 ×100
+  const money = (v, feat) => "¥" + (v * 100 * rateFor(feat)).toFixed(2);
+
+  function renderPanel(stats, usages, sub) {
     const root = document.getElementById("kqc-root");
     const bal = stats && stats.subscriptionBalance;
     const coding = usages && usages.usages && usages.usages[0];
@@ -270,193 +594,347 @@
     const h5 = coding && coding.limits && coding.limits[0] && coding.limits[0].detail;
     const total = usages && usages.totalQuota;
     const n = (x) => Number(x || 0);
-    const cur = getCur();
-    const poolValue = getPoolValue(cur);
-    const userSet = poolIsUserSet(cur);
-    const sym = cur === "USD" ? "$" : "¥";
-    const fmtMoney = (v) => sym + Number(v).toFixed(2);
-    const usedEst = bal ? fmtMoney(bal.amountUsedRatio * poolValue) : "-";
-    const r5 = stats?.ratelimitCode5h?.ratio ?? 0;
-    const r7 = stats?.ratelimitCode7d?.ratio ?? 0;
+    const usedRatio = bal ? Number(bal.amountUsedRatio) || 0 : 0;
+    const codeOfficial = bal && bal.kimiCodeUsedRatio != null ? Number(bal.kimiCodeUsedRatio) : null;
 
-    // 月度分类：官方 Code 比例 + 本地非 Code 累计（避免 Code 双重计入）
-    // 已知分类用固定显示名；未知分类通用转 Title Case（如 DEEP_RESEARCH→Deep Research）
-    const FEAT_NAMES = { CODING: "Code", CHAT: "Chat", AGENT: "Agent", SWARM: "Swarm", SLIDES: LANG === "zh" ? "PPT" : "Slides" };
-    const titleCase = (x) => x.toLowerCase().replace(/(^|\s)([a-z])/g, (m, a, b) => a + b.toUpperCase());
-    const featName = (f) => {
-      const raw = String(f || "");
-      if (FEAT_NAMES[raw]) return FEAT_NAMES[raw];
-      return titleCase(raw.replace(/_/g, " "));
-    };
-    const cycEntries = cycleStart ? entries.filter((e) => e.timestamp >= cycleStart) : entries.slice();
-    const codeOfficial = bal && bal.kimiCodeUsedRatio != null ? bal.kimiCodeUsedRatio : null;
-    let codeLocal = 0;
+    const cycleStart = (sub && sub.subscription && sub.subscription.currentStartTime) || null;
+    const curCycle = cycleOf(cycleStart || new Date().toISOString());
+    const isDone = (e) => !e.status || e.status === "DONE";
+
+    // 周期下拉：当前选中的周期决定表格与月度卡的口径
+    const cycleKeys = [
+      ...new Set([
+        ...state.entries.map((e) => cycleOf(e.timestamp)),
+        ...Object.keys(state.cycles),
+        curCycle,
+      ].filter(Boolean)),
+    ].sort().reverse();
+    if (curCycle && !cycleKeys.includes(curCycle)) cycleKeys.unshift(curCycle);
+    const view = state.viewCycle || curCycle;
+    const isCurrent = view === curCycle;
+    const closed = state.cycles[view] || null;
+
+    const viewEntries = state.entries.filter((e) => (view === "ALL" ? true : cycleOf(e.timestamp) === view) && isDone(e));
+
+    // 非 Code 分类求和；按原始 feature 归类，展示时再翻译
     const featSums = {};
-    for (const e of cycEntries) {
-      if (String(e.feature).toUpperCase() === "CODING") {
-        codeLocal += e.ratio || 0;
-        continue;
-      }
-      const key = featName(e.feature);
-      featSums[key] = (featSums[key] || 0) + (e.ratio || 0);
+    for (const e of viewEntries) {
+      const raw = String(e.feature).toUpperCase();
+      if (raw === "CODING") continue;
+      featSums[raw] = (featSums[raw] || 0) + (e.ratio || 0);
     }
-    const featOrder = ["Chat", "Agent", "Swarm"];
+    const featOrder = ["WORK", "WEBSITES", "AGENT", "SWARM", "CHAT"];
     const featKeys = [
       ...featOrder.filter((k) => featSums[k] != null),
-      ...Object.keys(featSums).filter((k) => !featOrder.includes(k)),
+      ...Object.keys(featSums)
+        .filter((k) => !featOrder.includes(k))
+        .sort((a, b) => featSums[b] - featSums[a]),
     ];
-    const localNonCodeSum = featKeys.reduce((acc, k) => acc + featSums[k], 0);
-    const codeVal = codeOfficial != null ? codeOfficial : codeLocal;
-    const codeTag = codeOfficial != null ? t("official") : t("local");
+    const localNonCode = featKeys.reduce((a, k) => a + featSums[k], 0);
+
+    // 当前周期用官方比例；历史周期优先用手里的周期终值快照
+    const localCode = viewEntries.filter((e) => e.feature === "CODING").reduce((a, e) => a + e.ratio, 0);
+    const codeVal = isCurrent ? (codeOfficial != null ? codeOfficial : localCode) : closed ? closed.code : localCode;
+    const codeIsOfficial = isCurrent ? codeOfficial != null : !!closed;
+    const officialTotal = isCurrent ? usedRatio : closed ? closed.used : null;
+    const localCycleSum = codeVal + localNonCode;
+    const shownTotal = officialTotal != null ? officialTotal : localCycleSum;
+    // 完整度必须只看"本地真正存下来的量"，不能用官方 Code 比例冒充
+    const localSumForCompleteness = localCode + localNonCode;
+    const completeness = officialTotal ? Math.min(1, localSumForCompleteness / officialTotal) : null;
+
     const featLines = [];
     featLines.push(
-      `<div class="kqc-label" style="margin-top:2px">${t("ofWhich")} Code <b>${pct(codeVal)}</b>（${esc(codeTag)}）${LANG === "zh" ? "，" : ", "}${t("estShort", { v: fmtMoney(codeVal * poolValue) })}</div>`,
+      `<div class="kqc-label" style="margin-top:2px">${t("ofWhich")} <b>${esc(featName("CODING"))}</b> <b>${pct(codeVal)}</b>（${esc(codeIsOfficial ? t("official") : t("local"))}）· ${money(codeVal, "CODING")}</div>`,
     );
-    for (const k of featKeys)
+    for (const k of featKeys) {
       featLines.push(
-        `<div class="kqc-label" style="margin-top:2px">${esc(k)} <b>${pct(featSums[k])}</b>${LANG === "zh" ? "，" : ", "}${t("estShort", { v: fmtMoney(featSums[k] * poolValue) })}</div>`,
+        `<div class="kqc-label" style="margin-top:2px">${esc(featName(k))} <b>${pct(featSums[k])}</b> · ${money(featSums[k], k)}</div>`,
       );
-    if (bal && bal.amountUsedRatio != null) {
-      const notCaptured = bal.amountUsedRatio - codeVal - localNonCodeSum;
-      if (notCaptured > 1e-9)
-        featLines.push(
-          `<div class="kqc-label" style="margin-top:2px">${esc(t("notCaptured"))} <b>${pct(notCaptured)}</b>${LANG === "zh" ? "，" : ", "}${t("estShort", { v: fmtMoney(notCaptured * poolValue) })}</div>`,
-        );
     }
-    const earliest = entries.length
-      ? entries.reduce((m, e) => (e.timestamp < m ? e.timestamp : m), entries[0].timestamp)
-      : null;
-    const localStatsLine = entries.length
-      ? `<div class="kqc-label" style="margin-top:6px">${t("localStats", { n: entries.length, d: fmtLocal(earliest) })}</div>`
-      : "";
-    const featLinesHtml = featLines.join("");
+    if (officialTotal != null && officialTotal - localCycleSum > 1e-9) {
+      const miss = officialTotal - localCycleSum;
+      featLines.push(
+        `<div class="kqc-label" style="margin-top:2px">${esc(t("notCaptured"))} <b>${pct(miss)}</b> · ${money(miss, "OTHER")}</div>`,
+      );
+    }
+    const totalMoney = codeVal * rateCode() + Math.max(0, shownTotal - codeVal) * rateOther();
 
-    const sorted = cycEntries.slice().sort((x, y) => (x.timestamp < y.timestamp ? 1 : -1));
-    const rows = sorted
-      .slice(0, 300)
+    const earliest = state.entries.length
+      ? state.entries.reduce((m, e) => (e.timestamp < m ? e.timestamp : m), state.entries[0].timestamp)
+      : null;
+    const localStatsLine = state.entries.length
+      ? `<div class="kqc-label" style="margin-top:6px">${t("localStats", { n: state.entries.length, d: fmtLocal(earliest).slice(0, 10) })}</div>`
+      : "";
+
+    const shown = viewEntries.slice().sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1)).slice(0, state.rows);
+    const rows = shown
       .map(
         (a) => `<tr>
         <td>${fmtLocal(a.timestamp, true)}</td>
         <td>${esc(featName(a.feature))}</td>
-        <td style="font-family:inherit">${esc(String(a.title || "").slice(0, 44))}</td>
+        <td style="font-family:inherit">${esc(String(a.title || "").slice(0, 52))}</td>
         <td>${pct(a.ratio)}</td>
-        <td>${fmtMoney(a.ratio * poolValue)}</td>
+        <td>${money(a.ratio, a.feature)}</td>
       </tr>`,
       )
       .join("");
+    const cycleOptions = [
+      `<option value="ALL" ${view === "ALL" ? "selected" : ""}>${t("cycleAll")} (${state.entries.length})</option>`,
+      ...cycleKeys.map((k) => {
+        const c = state.cycles[k];
+        const tag = c ? ` · ${t("cycleEndValue", { v: pct(c.used) })}` : "";
+        return `<option value="${esc(k)}" ${view === k ? "selected" : ""}>${cycleLabel(k)}${esc(tag)}</option>`;
+      }),
+    ].join("");
 
-    const canaryBanner = pageWindow.__KQC.streamUsageDetected
-      ? `<div class="kqc-canary">⚠ ${esc(t("canary"))}</div>`
-      : "";
+    // 选中"全部"时，月度卡退化为本地总计
+    const cardTitle = view === "ALL"
+      ? t("cycleAll")
+      : isCurrent
+        ? t("monthlyUsed")
+        : `${cycleLabel(view)}${closed ? " · " + t("official") : ""}`;
+    const bigValue = view === "ALL" ? pct(localNonCode + localCode) : pct(shownTotal);
+    const bigSuffix = isCurrent && total ? ' <span style="font-weight:400;font-size:12px;color:#666">(' + n(total.used) + "/" + n(total.limit) + ")</span>" : "";
+
+    const canaryBanner = pageWindow.__KQC.streamUsageDetected ? `<div class="kqc-canary">⚠ ${esc(t("canary"))}</div>` : "";
     const win5Line = h5 ? t("quotaUnits", { u: n(h5.used), l: n(h5.limit), r: n(h5.remaining) }) : "";
     const win7Line = weekly ? t("quotaUnits", { u: n(weekly.used), l: n(weekly.limit), r: n(weekly.remaining) }) : "";
+    const resetAt =
+      (sub && sub.subscription && (sub.subscription.nextBillingTime || sub.subscription.currentEndTime)) ||
+      (bal && bal.expireTime);
 
     root.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <div style="font-size:18px;font-weight:600">${t("title")} v${GM_info.script.version}</div>
-        <div class="kqc-close" id="kqc-close">&times;</div>
+        <div style="font-size:18px;font-weight:600">${t("title")} <span style="font-size:12px;color:#999">v${GM_info.script.version}</span>
+          <span class="kqc-pill">${esc(cycleLabel(curCycle))}</span></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="kqc-btn2" id="kqc-export-json">${t("exportJson")}</button>
+          <button class="kqc-btn2" id="kqc-export-csv">${t("exportCsv")}</button>
+          <button class="kqc-btn2" id="kqc-refresh">${t("refreshBtn")}</button>
+          <div class="kqc-close" id="kqc-close">&times;</div>
+        </div>
       </div>
       ${canaryBanner}
       <div class="kqc-grid">
-        <div class="kqc-card"><div class="kqc-label">${t("monthlyUsed")}</div>
-          <div class="kqc-value">${bal ? pct(bal.amountUsedRatio) : "-"}${total ? ' <span style="font-weight:400;font-size:12px;color:#666">(' + n(total.used) + "/" + n(total.limit) + ")</span>" : ""}</div>
-          ${featLinesHtml}
-          ${localStatsLine}
-        </div>
-        <div class="kqc-card"><div class="kqc-label">${t("poolValue")}<span class="kqc-tip">!<span class="kqc-tipbox">${t("tipBody")}</span></span></div>
-          <div class="kqc-value" style="font-size:13px;font-weight:400">
-            <select id="kqc-cur" style="font-size:12px">
-              <option value="CNY" ${cur === "CNY" ? "selected" : ""}>CNY ¥</option>
-              <option value="USD" ${cur === "USD" ? "selected" : ""}>USD $</option>
-            </select>
-            <input id="kqc-poolval" type="number" step="10" value="${poolValue}" style="width:76px;font-size:13px">
+        <div class="kqc-card"><div class="kqc-label">${esc(cardTitle)}</div>
+          <div class="kqc-value">${bigValue}${bigSuffix}</div>
+          ${featLines.join("")}
+          <div class="kqc-label" style="margin-top:8px;border-top:1px solid #eee;padding-top:6px">
+            合计 ≈ <b>${"¥" + totalMoney.toFixed(2)}</b>
+            ${completeness != null ? ` · ${esc(t("completeness", { v: Math.round(completeness * 100) + "%" }))}` : ""}
           </div>
-          <div class="kqc-label" style="margin-top:2px">${userSet ? esc(t("calibUser")) : esc(t("calibDefault"))} · ${esc(t("caliber"))}</div>
-          <div class="kqc-label" style="margin-top:2px">${t("poolUsed", { v: usedEst })}</div>
-          <div class="kqc-label" style="margin-top:2px">${t("k3oneM", { v: fmtMoney(poolValue / 2) })}</div></div>
+          ${localStatsLine}
+          <div class="kqc-label" style="margin-top:2px">${t("resetAt", { v: fmtLocal(resetAt).slice(5) })}</div>
+        </div>
+        <div class="kqc-card"><div class="kqc-label">${t("rateNote")}<span class="kqc-tip">!<span class="kqc-tipbox">${t("tipBody")}</span></span></div>
+          <div class="kqc-value" style="font-size:13px;font-weight:400;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <label>Code <input class="kqc-input" id="kqc-rate-code" type="number" step="1" value="${rateCode()}"></label>
+            <label>${LANG === "zh" ? "其他" : "Other"} <input class="kqc-input" id="kqc-rate-other" type="number" step="1" value="${rateOther()}"></label>
+          </div>
+          <div class="kqc-label" style="margin-top:6px">${esc(t("rateHint"))}</div>
+        </div>
         <div class="kqc-card"><div class="kqc-label">${t("w5h")}</div>
-          <div class="kqc-value">${pct(r5)}</div>
+          <div class="kqc-value">${pct(stats?.ratelimitCode5h?.ratio ?? 0)}</div>
           ${win5Line ? `<div class="kqc-label" style="margin-top:2px">${win5Line}</div>` : ""}
           <div class="kqc-label" style="margin-top:2px">${t("resetAt", { v: fmtLocal(h5?.resetTime || stats?.ratelimitCode5h?.resetTime).slice(5) })}</div></div>
         <div class="kqc-card"><div class="kqc-label">${t("w7d")}</div>
-          <div class="kqc-value">${pct(r7)}</div>
+          <div class="kqc-value">${pct(stats?.ratelimitCode7d?.ratio ?? 0)}</div>
           ${win7Line ? `<div class="kqc-label" style="margin-top:2px">${win7Line}</div>` : ""}
           <div class="kqc-label" style="margin-top:2px">${t("resetAt", { v: fmtLocal(weekly?.resetTime || stats?.ratelimitCode7d?.resetTime).slice(5) })}</div></div>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;gap:10px">
         <div style="font-weight:600;font-size:13px">${t("ledger")}</div>
-        <div class="kqc-est">${t("estNote")}</div>
+        <div style="display:flex;gap:10px;align-items:center;margin-left:auto">
+          <span class="kqc-est">${esc(t("cycle"))}</span>
+          <select id="kqc-cycle" style="font-size:12px;max-width:300px">${cycleOptions}</select>
+        </div>
       </div>
-      <div style="max-height:280px;overflow-y:auto;border:1px solid #eee;border-radius:6px">
+      <div style="max-height:320px;overflow-y:auto;border:1px solid #eee;border-radius:6px">
         <table class="kqc-table">
           <thead><tr><th>${t("thTime")}</th><th>${t("thFeature")}</th><th>${t("thTitle")}</th><th>${t("thUsed")}</th><th>${t("thEst")}</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+        <div class="kqc-est">${esc(t("shownRows", { a: shown.length, b: viewEntries.length }))}</div>
+        ${viewEntries.length > shown.length ? `<button class="kqc-btn2" id="kqc-more">${t("loadMore")}</button>` : ""}
+      </div>
       <div class="kqc-foot">${t("footer")}</div>`;
     root.style.display = "flex";
+
     document.getElementById("kqc-close").onclick = () => (root.style.display = "none");
-    const pv = document.getElementById("kqc-poolval");
-    if (pv)
-      pv.onchange = () => {
-        const v = Number(pv.value);
-        if (v > 0) {
-          pageWindow.localStorage.setItem(poolKey(cur), String(v));
-          run();
-        }
-      };
-    const cs = document.getElementById("kqc-cur");
-    if (cs)
-      cs.onchange = () => {
-        pageWindow.localStorage.setItem(CUR_KEY, cs.value);
-        run();
-      };
+    document.getElementById("kqc-refresh").onclick = () => run(true);
+    document.getElementById("kqc-export-json").onclick = () => exportData("json");
+    document.getElementById("kqc-export-csv").onclick = () => exportData("csv");
+    const moreBtn = document.getElementById("kqc-more");
+    if (moreBtn) moreBtn.onclick = () => { state.rows += 300; renderPanel(stats, usages, sub); };
+    const cySel = document.getElementById("kqc-cycle");
+    if (cySel) cySel.onchange = () => { state.viewCycle = cySel.value; state.rows = 300; renderPanel(stats, usages, sub); };
+    const rc = document.getElementById("kqc-rate-code");
+    if (rc) rc.onchange = () => {
+      const v = Number(rc.value);
+      if (v > 0) { pageWindow.localStorage.setItem(RATE_CODE_KEY, String(v)); renderPanel(stats, usages, sub); }
+    };
+    const ro = document.getElementById("kqc-rate-other");
+    if (ro) ro.onchange = () => {
+      const v = Number(ro.value);
+      if (v > 0) { pageWindow.localStorage.setItem(RATE_OTHER_KEY, String(v)); renderPanel(stats, usages, sub); }
+    };
   }
 
-  async function run() {
+  // ---------- export ----------
+  function csvCell(v, guardFormula) {
+    let s = String(v ?? "");
+    // 文本列防电子表格公式注入（JSON 导出保留原始文本）
+    if (guardFormula && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  async function exportData(kind = "json") {
+    try {
+      const entries = (await dbGetAll(S_ACTIONS)).sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
+      const snaps = (await dbGetAll(S_SNAPSHOTS)).sort((a, b) => (a.ts < b.ts ? 1 : -1));
+      const cycles = await dbGetAll(S_CYCLES);
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      if (kind === "json") {
+        const json = {
+          exportedAt: new Date().toISOString(),
+          scriptVersion: GM_info.script.version,
+          rates: { codePerPct: rateCode(), otherPerPct: rateOther() },
+          cycles,
+          entries,
+          snapshots: snaps,
+        };
+        download(`kimi-quota-${stamp}.json`, JSON.stringify(json, null, 1), "application/json");
+      }
+
+      const head = "id,timestamp_utc,timestamp_local,feature,title,ratio_pct,rate_cny_per_pct,est_cny,status\n";
+      const body = entries
+        .map((e) =>
+          [
+            e.id,
+            e.timestamp,
+            fmtLocal(e.timestamp, true),
+            e.feature,
+            e.title,
+            (e.ratio * 100).toFixed(4),
+            rateFor(e.feature),
+            (e.ratio * 100 * rateFor(e.feature)).toFixed(2),
+            e.status || "DONE",
+          ].map(csvCell).join(","),
+        )
+        .join("\n");
+      if (kind === "csv") download(`kimi-quota-${stamp}.csv`, head + body, "text/csv");
+      alert(t("exported", { n: entries.length, m: snaps.length }));
+    } catch (e) {
+      alert(t("err") + ": " + e.message);
+    }
+  }
+
+  function download(name, content, mime) {
+    // Tampermonkey 沙箱里 Blob/URL 可能来自沙箱 realm，跨 realm 传给页面会报 "not a Blob"；
+    // 统一用 pageWindow 构造，保证与页面下载逻辑同一 realm。
+    const BlobCtor = pageWindow.Blob || Blob;
+    const URLCtor = pageWindow.URL || URL;
+    const blob = new BlobCtor([content], { type: mime + ";charset=utf-8" });
+    const url = URLCtor.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URLCtor.revokeObjectURL(url);
+      a.remove();
+    }, 1000);
+  }
+
+  // 快照不能只在打开面板时写：用户正常用 Kimi 但不开面板时，
+  // 官方百分比会随着周期重置永久丢失。这里独立轮询，4 分钟一次。
+  let lastStatsPoll = 0;
+  async function pollStats(force = false) {
+    const now = Date.now();
+    if (!force && now - lastStatsPoll < 4 * 60 * 1000) return;
+    lastStatsPoll = now;
+    try {
+      const [stats, sub] = await Promise.all([apiPost(API.stats), apiPost(API.sub).catch(() => null)]);
+      await recordSnapshot(stats, sub);
+    } catch (e) {
+      debug("pollStats err: " + e);
+    }
+  }
+
+  // ---------- main ----------
+  async function run(full = true) {
     const btn = document.getElementById("kqc-btn");
-    btn.innerText = t("loading");
+    if (btn) btn.innerText = t("loading");
     try {
       await captureLedger(true);
-      const [stats, entriesRaw, sub] = await Promise.all([
-        apiPost("/apiv2/kimi.gateway.membership.v2.MembershipService/GetSubscriptionStats"),
-        dbGetAll().catch(() => []),
-        apiPost("/apiv2/kimi.gateway.membership.v2.MembershipService/GetSubscription").catch(() => null),
+      const [stats, entries, sub] = await Promise.all([
+        apiPost(API.stats),
+        dbGetAll(S_ACTIONS).catch(() => []),
+        apiPost(API.sub).catch(() => null),
       ]);
       let usages = null;
       try {
-        usages = await apiPost("/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages", {
-          scope: ["FEATURE_CODING"],
-        });
+        usages = await apiPost(API.usages, { scope: ["FEATURE_CODING"] });
       } catch (e) {
         debug("GetUsages err: " + e);
       }
-      const cycleStart = sub?.subscription?.currentStartTime || null;
-      renderPanel(stats, usages, entriesRaw, cycleStart);
+      await recordSnapshot(stats, sub).catch(() => {});
+      const [cyclesArr, snapsAll] = await Promise.all([
+        dbGetAll(S_CYCLES).catch(() => []),
+        dbGetAll(S_SNAPSHOTS).catch(() => []),
+      ]);
+      setCycleStarts([
+        ...(sub && sub.subscription ? [sub.subscription.currentStartTime] : []),
+        ...cyclesArr.map((c) => c.cycleStart),
+        ...snapsAll.map((x) => x.cycleStart),
+      ]);
+      state.entries = entries;
+      state.cycles = {};
+      for (const c of cyclesArr) state.cycles[c.cycle] = c;
+      state.viewCycle = null;
+      state.rows = 300;
+      renderPanel(stats, usages, sub);
     } catch (e) {
-      alert(t("err") + ": " + e.message);
+      if (full) alert(t("err") + ": " + e.message);
+      debug("run err: " + e);
     } finally {
-      btn.innerText = t("btn");
+      if (btn) btn.innerText = t("btn");
     }
   }
 
   const boot = () => {
     if (document.getElementById("kqc-btn")) return;
+    migrateLegacyRates();
     const btn = document.createElement("button");
     btn.id = "kqc-btn";
     btn.innerText = t("btn");
-    btn.onclick = run;
+    btn.onclick = () => run(true);
     document.body.appendChild(btn);
     const root = document.createElement("div");
     root.id = "kqc-root";
     document.body.appendChild(root);
-    // 抓取时机：页面打开立即、切回页面立即（focus / visibilitychange）、前台每 5 分钟
+    // 抓取时机：页面打开立即（含分页回填）、切回页面立即、前台每 60 秒
     captureLedger(true);
-    setInterval(() => captureLedger(), 5 * 60 * 1000);
-    pageWindow.addEventListener("focus", () => captureLedger());
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") captureLedger();
+    pollStats(true);
+    setInterval(() => {
+      captureLedger();
+      pollStats();
+    }, 60 * 1000);
+    pageWindow.addEventListener("focus", () => {
+      captureLedger();
+      pollStats();
     });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        captureLedger();
+        pollStats();
+      } else captureLedger(); // 离开前也补一次，减少长时间离开造成的空档
+    });
+    pageWindow.addEventListener("pagehide", () => captureLedger());
   };
 
   if (document.body) boot();
