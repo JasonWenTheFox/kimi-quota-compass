@@ -2,7 +2,7 @@
 // @name         Kimi Quota Compass
 // @name:zh-CN   Kimi 用量罗盘
 // @namespace    https://github.com/JasonWenTheFox
-// @version      0.8.0
+// @version      0.8.1
 // @description  Kimi membership quota panel: monthly pool, Kimi Code 5h/7d windows, per-action ledger with full-cycle backfill, cycle snapshots and CSV/JSON export
 // @description:zh-CN  Kimi 会员用量面板：月度额度池、Kimi Code 5小时/7天窗口、逐条额度流水（支持全周期回填、周期快照与导出）
 // @author       JW
@@ -35,10 +35,21 @@
     official: { zh: "官方", en: "official" },
     local: { zh: "本地", en: "local" },
     completeness: { zh: "本周期数据完整度 {v}", en: "Cycle completeness {v}" },
-    rateNote: { zh: "¥/1% 校准", en: "¥ per 1%" },
+    rateNote: { zh: "金额换算（可选）", en: "Amounts (optional)" },
+    planLabel: { zh: "订阅套餐", en: "Plan" },
+    planNone: { zh: "未选择（可选）", en: "not set (optional)" },
+    planOld: { zh: "已实测", en: "measured" },
+    planNew: { zh: "未实测", en: "not measured" },
+    planHintOld: { zh: "老套餐：参考值来自实测（Code ¥21、其他 ¥6 / 每 1%）。", en: "Old plans: measured defaults (Code ¥21, other ¥6 per 1%)." },
+    planHintNew: { zh: "新套餐取消了 Code 额度补贴，老套餐的参考值不适用；请自行校准，或留空不显示金额。", en: "New plans dropped the Code quota discount, so the old defaults do not apply. Calibrate yourself or leave blank." },
+    fillRef: { zh: "填入参考值", en: "Fill defaults" },
+    rateEmptyHint: { zh: "留空则不显示任何金额。", en: "Leave blank to hide all amounts." },
+    noRecord: { zh: "官方终值未捕获", en: "official end value not captured" },
+    localOnly: { zh: "本地已记录 {v}（非周期总量）", en: "local ledger {v} (not the cycle total)" },
+    tailDiff: { zh: "官方尾差 {v}", en: "official rounding gap {v}" },
     rateHint: {
-      zh: "按公开 API 牌价折算：Kimi Code 每 1% 约 ¥21，网页/Work 类每 1% 约 ¥3–9（实测）。金额均为估算，非官方账单。",
-      en: "Converted with public API prices: ~¥21 per 1% for Kimi Code, ~¥3–9 per 1% for web/Work features (measured). Estimates only, not official billing.",
+      zh: "金额 = 额度百分比 × 每 1% 的 API 等价值，按公开牌价折算，非官方账单。",
+      en: "Amount = quota % × API-equivalent per 1%. Converted from public list prices, not official billing.",
     },
     w5h: { zh: "Code 5 小时窗口", en: "Code 5h window" },
     w7d: { zh: "Code 7 天窗口", en: "Code 7d window" },
@@ -483,7 +494,14 @@
       const st = Date.parse(s);
       if (!isNaN(st) && st <= t) best = s;
     }
-    return best ? cycleKeyOf(best) : ruleCycleOf(isoLike);
+    if (best) return cycleKeyOf(best);
+    // 早于已知最早周期起点的记录归到上一个周期：
+    // 官方起点是 02:02:15，按分钟规则会把重置前 15 秒的流水错算进新周期
+    if (cycleStarts.length) {
+      const first = Date.parse(cycleStarts[0]);
+      if (!isNaN(first) && t < first && first - t < 24 * 3600 * 1000) return ruleCycleOf(new Date(first - 1000).toISOString());
+    }
+    return ruleCycleOf(isoLike);
   }
 
   const cycleLabel = (key) => {
@@ -522,26 +540,50 @@
   const RATE_OTHER_KEY = "kqc_rate_other";
   const LEGACY_POOL_KEY = "kqc_pool_value_cny";
   const LEGACY_POOL_USD_KEY = "kqc_pool_value_usd";
+  const PLAN_KEY = "kqc_plan";
+
+  // 套餐只用来给"参考值"和实测/未实测标记，本身不参与计算
+  const PLANS = [
+    { id: "andante", group: "old", label: "Andante ¥49" },
+    { id: "moderato", group: "old", label: "Moderato ¥99" },
+    { id: "allegretto", group: "old", label: "Allegretto ¥199" },
+    { id: "allegro", group: "old", label: "Allegro ¥699" },
+    { id: "go", group: "new", label: "Go ¥49" },
+    { id: "plus", group: "new", label: "Plus ¥99" },
+    { id: "pro", group: "new", label: "Pro ¥199" },
+    { id: "max", group: "new", label: "Max ¥699" },
+    { id: "ultra", group: "new", label: "Ultra ¥1399" },
+    { id: "custom", group: "custom", label: "自定义" },
+  ];
+  const planInfo = () => PLANS.find((p) => p.id === pageWindow.localStorage.getItem(PLAN_KEY)) || null;
 
   function migrateLegacyRates() {
     const ls = pageWindow.localStorage;
-    if (ls.getItem(RATE_CODE_KEY) == null) {
-      const cur = ls.getItem("kqc_currency") === "USD" ? "USD" : "CNY";
-      const cny = Number(ls.getItem(LEGACY_POOL_KEY));
-      const usd = Number(ls.getItem(LEGACY_POOL_USD_KEY));
-      let rate = null;
-      // 旧版按 kqc_currency 决定生效的是哪个币种，迁移必须跟随，而不是优先 CNY
-      if (cur === "USD" && usd > 0) rate = (usd * 7.1) / 100;
-      else if (cur === "CNY" && cny > 0) rate = cny / 100;
-      else if (cny > 0) rate = cny / 100;
-      else if (usd > 0) rate = (usd * 7.1) / 100;
-      ls.setItem(RATE_CODE_KEY, String(+(rate != null ? rate : 21).toFixed(2)));
+    if (ls.getItem(RATE_CODE_KEY) != null || ls.getItem(RATE_OTHER_KEY) != null) return;
+    const cur = ls.getItem("kqc_currency") === "USD" ? "USD" : "CNY";
+    const cny = Number(ls.getItem(LEGACY_POOL_KEY));
+    const usd = Number(ls.getItem(LEGACY_POOL_USD_KEY));
+    let code = null;
+    // 旧版按 kqc_currency 决定生效的是哪个币种，迁移必须跟随
+    if (cur === "USD" && usd > 0) code = (usd * 7.1) / 100;
+    else if (cny > 0) code = cny / 100;
+    else if (usd > 0) code = (usd * 7.1) / 100;
+    // 没有历史校准值就保持为空：金额默认不显示
+    if (code != null) {
+      ls.setItem(RATE_CODE_KEY, String(+code.toFixed(2)));
+      ls.setItem(RATE_OTHER_KEY, String(+Math.max(1, code / 3.5).toFixed(2)));
     }
-    if (ls.getItem(RATE_OTHER_KEY) == null) ls.setItem(RATE_OTHER_KEY, "7");
   }
 
-  const rateCode = () => Number(pageWindow.localStorage.getItem(RATE_CODE_KEY)) || 21;
-  const rateOther = () => Number(pageWindow.localStorage.getItem(RATE_OTHER_KEY)) || 7;
+  // 费率是可选项：未填返回 null，全站不显示任何金额
+  const rateCode = () => {
+    const v = Number(pageWindow.localStorage.getItem(RATE_CODE_KEY));
+    return v > 0 ? v : null;
+  };
+  const rateOther = () => {
+    const v = Number(pageWindow.localStorage.getItem(RATE_OTHER_KEY));
+    return v > 0 ? v : null;
+  };
   const rateFor = (feat) => (String(feat).toUpperCase() === "CODING" ? rateCode() : rateOther());
 
   // ---------- panel ----------
@@ -583,8 +625,11 @@
 
   const state = { entries: [], cycles: {}, viewCycle: null, rows: 300 };
 
-  // v 是 0–1 的比例，费率是"元 / 1%"，所以要 ×100
-  const money = (v, feat) => "¥" + (v * 100 * rateFor(feat)).toFixed(2);
+  // v 是 0–1 的比例，费率是"元 / 1%"（可选项），所以要 ×100
+  const money = (v, feat) => {
+    const r = rateFor(feat);
+    return r == null ? "" : "¥" + (v * 100 * r).toFixed(2);
+  };
 
   function renderPanel(stats, usages, sub) {
     const root = document.getElementById("kqc-root");
@@ -601,7 +646,6 @@
     const curCycle = cycleOf(cycleStart || new Date().toISOString());
     const isDone = (e) => !e.status || e.status === "DONE";
 
-    // 周期下拉：当前选中的周期决定表格与月度卡的口径
     const cycleKeys = [
       ...new Set([
         ...state.entries.map((e) => cycleOf(e.timestamp)),
@@ -609,14 +653,12 @@
         curCycle,
       ].filter(Boolean)),
     ].sort().reverse();
-    if (curCycle && !cycleKeys.includes(curCycle)) cycleKeys.unshift(curCycle);
     const view = state.viewCycle || curCycle;
     const isCurrent = view === curCycle;
     const closed = state.cycles[view] || null;
 
     const viewEntries = state.entries.filter((e) => (view === "ALL" ? true : cycleOf(e.timestamp) === view) && isDone(e));
 
-    // 非 Code 分类求和；按原始 feature 归类，展示时再翻译
     const featSums = {};
     for (const e of viewEntries) {
       const raw = String(e.feature).toUpperCase();
@@ -631,34 +673,62 @@
         .sort((a, b) => featSums[b] - featSums[a]),
     ];
     const localNonCode = featKeys.reduce((a, k) => a + featSums[k], 0);
-
-    // 当前周期用官方比例；历史周期优先用手里的周期终值快照
     const localCode = viewEntries.filter((e) => e.feature === "CODING").reduce((a, e) => a + e.ratio, 0);
-    const codeVal = isCurrent ? (codeOfficial != null ? codeOfficial : localCode) : closed ? closed.code : localCode;
-    const codeIsOfficial = isCurrent ? codeOfficial != null : !!closed;
+
+    // 周期总量只认官方：当期用实时值，历史周期用快照里固化的终值。
+    // 没有快照的历史周期一律显示"未捕获"，绝不拿本地合计冒充总量。
     const officialTotal = isCurrent ? usedRatio : closed ? closed.used : null;
-    const localCycleSum = codeVal + localNonCode;
-    const shownTotal = officialTotal != null ? officialTotal : localCycleSum;
-    // 完整度必须只看"本地真正存下来的量"，不能用官方 Code 比例冒充
+    const codeVal = isCurrent
+      ? codeOfficial != null
+        ? codeOfficial
+        : localCode
+      : closed && closed.code != null
+        ? closed.code
+        : localCode;
+    const codeIsOfficial = isCurrent ? codeOfficial != null : !!(closed && closed.code != null);
+    const localSum = codeVal + localNonCode;
     const localSumForCompleteness = localCode + localNonCode;
-    const completeness = officialTotal ? Math.min(1, localSumForCompleteness / officialTotal) : null;
+    const completeness = isCurrent && officialTotal ? Math.min(1, localSumForCompleteness / officialTotal) : null;
+
+    const moneyOn = rateCode() != null || rateOther() != null;
 
     const featLines = [];
-    featLines.push(
-      `<div class="kqc-label" style="margin-top:2px">${t("ofWhich")} <b>${esc(featName("CODING"))}</b> <b>${pct(codeVal)}</b>（${esc(codeIsOfficial ? t("official") : t("local"))}）· ${money(codeVal, "CODING")}</div>`,
-    );
+    {
+      const m = money(codeVal, "CODING");
+      featLines.push(
+        `<div class="kqc-label" style="margin-top:2px">${t("ofWhich")} <b>${esc(featName("CODING"))}</b> <b>${pct(codeVal)}</b>（${esc(codeIsOfficial ? t("official") : t("local"))}）${m ? " · " + m : ""}</div>`,
+      );
+    }
     for (const k of featKeys) {
+      const m = money(featSums[k], k);
       featLines.push(
-        `<div class="kqc-label" style="margin-top:2px">${esc(featName(k))} <b>${pct(featSums[k])}</b> · ${money(featSums[k], k)}</div>`,
+        `<div class="kqc-label" style="margin-top:2px">${esc(featName(k))} <b>${pct(featSums[k])}</b>${m ? " · " + m : ""}</div>`,
       );
     }
-    if (officialTotal != null && officialTotal - localCycleSum > 1e-9) {
-      const miss = officialTotal - localCycleSum;
+    if (officialTotal != null) {
+      const miss = officialTotal - localSum;
+      if (miss > 0.0005) {
+        const m = money(miss, "OTHER");
+        featLines.push(
+          `<div class="kqc-label" style="margin-top:2px">${esc(t("notCaptured"))} <b>${pct(miss)}</b>${m ? " · " + m : ""}</div>`,
+        );
+      } else if (Math.abs(miss) > 1e-6) {
+        // 官方总量与明细本身就有 ±0.02~0.03pp 的尾差，不能当成漏抓
+        featLines.push(
+          `<div class="kqc-label" style="margin-top:2px;color:#aaa">${esc(t("tailDiff", { v: (miss > 0 ? "+" : "") + (miss * 100).toFixed(2) + "%" }))}</div>`,
+        );
+      }
+    }
+    if (!isCurrent && view !== "ALL" && officialTotal == null) {
       featLines.push(
-        `<div class="kqc-label" style="margin-top:2px">${esc(t("notCaptured"))} <b>${pct(miss)}</b> · ${money(miss, "OTHER")}</div>`,
+        `<div class="kqc-label" style="margin-top:2px;color:#aaa">${esc(t("localOnly", { v: pct(localSumForCompleteness) }))}</div>`,
       );
     }
-    const totalMoney = codeVal * rateCode() + Math.max(0, shownTotal - codeVal) * rateOther();
+
+    const showTotalMoney =
+      rateCode() != null && rateOther() != null && (officialTotal != null || view === "ALL");
+    const totalMoney =
+      showTotalMoney ? codeVal * 100 * rateCode() + Math.max(0, (officialTotal != null ? officialTotal : localSum) - codeVal) * 100 * rateOther() : null;
 
     const earliest = state.entries.length
       ? state.entries.reduce((m, e) => (e.timestamp < m ? e.timestamp : m), state.entries[0].timestamp)
@@ -667,17 +737,34 @@
       ? `<div class="kqc-label" style="margin-top:6px">${t("localStats", { n: state.entries.length, d: fmtLocal(earliest).slice(0, 10) })}</div>`
       : "";
 
+    // 大数字
+    let bigLabel;
+    let bigValue;
+    let bigSuffix = "";
+    if (view === "ALL") {
+      bigLabel = t("cycleAll");
+      bigValue = pct(localSumForCompleteness);
+    } else if (officialTotal != null) {
+      bigLabel = isCurrent ? t("monthlyUsed") : cycleLabel(view);
+      bigValue = pct(officialTotal);
+      if (isCurrent && total) bigSuffix = ' <span style="font-weight:400;font-size:12px;color:#666">(' + n(total.used) + "/" + n(total.limit) + ")</span>";
+    } else {
+      bigLabel = cycleLabel(view);
+      bigValue = `<span style="font-size:15px;color:#c0392b">${esc(t("noRecord"))}</span>`;
+    }
+
     const shown = viewEntries.slice().sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1)).slice(0, state.rows);
     const rows = shown
-      .map(
-        (a) => `<tr>
+      .map((a) => {
+        const m = money(a.ratio, a.feature);
+        return `<tr>
         <td>${fmtLocal(a.timestamp, true)}</td>
         <td>${esc(featName(a.feature))}</td>
         <td style="font-family:inherit">${esc(String(a.title || "").slice(0, 52))}</td>
         <td>${pct(a.ratio)}</td>
-        <td>${money(a.ratio, a.feature)}</td>
-      </tr>`,
-      )
+        ${moneyOn ? `<td>${m || "-"}</td>` : ""}
+      </tr>`;
+      })
       .join("");
     const cycleOptions = [
       `<option value="ALL" ${view === "ALL" ? "selected" : ""}>${t("cycleAll")} (${state.entries.length})</option>`,
@@ -688,14 +775,20 @@
       }),
     ].join("");
 
-    // 选中"全部"时，月度卡退化为本地总计
-    const cardTitle = view === "ALL"
-      ? t("cycleAll")
-      : isCurrent
-        ? t("monthlyUsed")
-        : `${cycleLabel(view)}${closed ? " · " + t("official") : ""}`;
-    const bigValue = view === "ALL" ? pct(localNonCode + localCode) : pct(shownTotal);
-    const bigSuffix = isCurrent && total ? ' <span style="font-weight:400;font-size:12px;color:#666">(' + n(total.used) + "/" + n(total.limit) + ")</span>" : "";
+    // 套餐 / 费率
+    const plan = planInfo();
+    const planGroup = plan ? plan.group : null;
+    const planOptions = [
+      `<option value="">${esc(t("planNone"))}</option>`,
+      ...PLANS.map((p) => `<option value="${esc(p.id)}" ${plan && plan.id === p.id ? "selected" : ""}>${esc(p.label)}</option>`),
+    ].join("");
+    const planBadge =
+      planGroup === "old"
+        ? `<span class="kqc-pill" style="background:#e6f7ec;color:#1e7e43">${esc(t("planOld"))}</span>`
+        : planGroup === "new"
+          ? `<span class="kqc-pill" style="background:#f0f0f0;color:#888">${esc(t("planNew"))}</span>`
+          : "";
+    const planHint = planGroup === "old" ? t("planHintOld") : planGroup === "new" ? t("planHintNew") : t("rateHint");
 
     const canaryBanner = pageWindow.__KQC.streamUsageDetected ? `<div class="kqc-canary">⚠ ${esc(t("canary"))}</div>` : "";
     const win5Line = h5 ? t("quotaUnits", { u: n(h5.used), l: n(h5.limit), r: n(h5.remaining) }) : "";
@@ -717,22 +810,24 @@
       </div>
       ${canaryBanner}
       <div class="kqc-grid">
-        <div class="kqc-card"><div class="kqc-label">${esc(cardTitle)}</div>
+        <div class="kqc-card"><div class="kqc-label">${bigLabel}</div>
           <div class="kqc-value">${bigValue}${bigSuffix}</div>
           ${featLines.join("")}
-          <div class="kqc-label" style="margin-top:8px;border-top:1px solid #eee;padding-top:6px">
-            合计 ≈ <b>${"¥" + totalMoney.toFixed(2)}</b>
-            ${completeness != null ? ` · ${esc(t("completeness", { v: Math.round(completeness * 100) + "%" }))}` : ""}
-          </div>
+          ${showTotalMoney ? `<div class="kqc-label" style="margin-top:8px;border-top:1px solid #eee;padding-top:6px">合计 ≈ <b>¥${totalMoney.toFixed(2)}</b>${completeness != null ? ` · ${esc(t("completeness", { v: Math.round(completeness * 100) + "%" }))}` : ""}</div>` : completeness != null ? `<div class="kqc-label" style="margin-top:8px;border-top:1px solid #eee;padding-top:6px">${esc(t("completeness", { v: Math.round(completeness * 100) + "%" }))}</div>` : ""}
           ${localStatsLine}
           <div class="kqc-label" style="margin-top:2px">${t("resetAt", { v: fmtLocal(resetAt).slice(5) })}</div>
         </div>
-        <div class="kqc-card"><div class="kqc-label">${t("rateNote")}<span class="kqc-tip">!<span class="kqc-tipbox">${t("tipBody")}</span></span></div>
-          <div class="kqc-value" style="font-size:13px;font-weight:400;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <label>Code <input class="kqc-input" id="kqc-rate-code" type="number" step="1" value="${rateCode()}"></label>
-            <label>${LANG === "zh" ? "其他" : "Other"} <input class="kqc-input" id="kqc-rate-other" type="number" step="1" value="${rateOther()}"></label>
+        <div class="kqc-card">
+          <div class="kqc-label">${t("planLabel")}${planBadge}</div>
+          <select id="kqc-plan" style="font-size:12px;max-width:220px;margin-bottom:6px">${planOptions}</select>
+          <div class="kqc-label" style="line-height:1.5">${esc(planHint)}</div>
+          <div class="kqc-label" style="margin-top:8px;border-top:1px solid #eee;padding-top:6px">${t("rateNote")}<span class="kqc-tip">!<span class="kqc-tipbox">${t("tipBody")}</span></span></div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px">
+            <label>Code <input class="kqc-input" id="kqc-rate-code" type="number" step="1" placeholder="—" value="${rateCode() == null ? "" : rateCode()}"></label>
+            <label>${LANG === "zh" ? "其他" : "Other"} <input class="kqc-input" id="kqc-rate-other" type="number" step="1" placeholder="—" value="${rateOther() == null ? "" : rateOther()}"></label>
+            ${planGroup === "old" ? `<button class="kqc-btn2" id="kqc-fill">${t("fillRef")}</button>` : ""}
           </div>
-          <div class="kqc-label" style="margin-top:6px">${esc(t("rateHint"))}</div>
+          <div class="kqc-label" style="margin-top:4px;color:#aaa">${esc(t("rateEmptyHint"))}</div>
         </div>
         <div class="kqc-card"><div class="kqc-label">${t("w5h")}</div>
           <div class="kqc-value">${pct(stats?.ratelimitCode5h?.ratio ?? 0)}</div>
@@ -752,7 +847,7 @@
       </div>
       <div style="max-height:320px;overflow-y:auto;border:1px solid #eee;border-radius:6px">
         <table class="kqc-table">
-          <thead><tr><th>${t("thTime")}</th><th>${t("thFeature")}</th><th>${t("thTitle")}</th><th>${t("thUsed")}</th><th>${t("thEst")}</th></tr></thead>
+          <thead><tr><th>${t("thTime")}</th><th>${t("thFeature")}</th><th>${t("thTitle")}</th><th>${t("thUsed")}</th>${moneyOn ? `<th>${t("thEst")}</th>` : ""}</tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -771,16 +866,42 @@
     if (moreBtn) moreBtn.onclick = () => { state.rows += 300; renderPanel(stats, usages, sub); };
     const cySel = document.getElementById("kqc-cycle");
     if (cySel) cySel.onchange = () => { state.viewCycle = cySel.value; state.rows = 300; renderPanel(stats, usages, sub); };
+    const plSel = document.getElementById("kqc-plan");
+    if (plSel)
+      plSel.onchange = () => {
+        if (plSel.value) pageWindow.localStorage.setItem(PLAN_KEY, plSel.value);
+        else pageWindow.localStorage.removeItem(PLAN_KEY);
+        // 选了老套餐且费率还空着时，顺手填上实测参考值
+        const info = planInfo();
+        if (info && info.group === "old" && rateCode() == null && rateOther() == null) {
+          pageWindow.localStorage.setItem(RATE_CODE_KEY, "21");
+          pageWindow.localStorage.setItem(RATE_OTHER_KEY, "6");
+        }
+        renderPanel(stats, usages, sub);
+      };
+    const fillBtn = document.getElementById("kqc-fill");
+    if (fillBtn)
+      fillBtn.onclick = () => {
+        pageWindow.localStorage.setItem(RATE_CODE_KEY, "21");
+        pageWindow.localStorage.setItem(RATE_OTHER_KEY, "6");
+        renderPanel(stats, usages, sub);
+      };
     const rc = document.getElementById("kqc-rate-code");
-    if (rc) rc.onchange = () => {
-      const v = Number(rc.value);
-      if (v > 0) { pageWindow.localStorage.setItem(RATE_CODE_KEY, String(v)); renderPanel(stats, usages, sub); }
-    };
+    if (rc)
+      rc.onchange = () => {
+        const v = Number(rc.value);
+        if (v > 0) pageWindow.localStorage.setItem(RATE_CODE_KEY, String(v));
+        else pageWindow.localStorage.removeItem(RATE_CODE_KEY);
+        renderPanel(stats, usages, sub);
+      };
     const ro = document.getElementById("kqc-rate-other");
-    if (ro) ro.onchange = () => {
-      const v = Number(ro.value);
-      if (v > 0) { pageWindow.localStorage.setItem(RATE_OTHER_KEY, String(v)); renderPanel(stats, usages, sub); }
-    };
+    if (ro)
+      ro.onchange = () => {
+        const v = Number(ro.value);
+        if (v > 0) pageWindow.localStorage.setItem(RATE_OTHER_KEY, String(v));
+        else pageWindow.localStorage.removeItem(RATE_OTHER_KEY);
+        renderPanel(stats, usages, sub);
+      };
   }
 
   // ---------- export ----------
@@ -802,6 +923,7 @@
           exportedAt: new Date().toISOString(),
           scriptVersion: GM_info.script.version,
           rates: { codePerPct: rateCode(), otherPerPct: rateOther() },
+        plan: pageWindow.localStorage.getItem(PLAN_KEY) || null,
           cycles,
           entries,
           snapshots: snaps,
