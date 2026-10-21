@@ -2,7 +2,7 @@
 // @name         Kimi Quota Compass
 // @name:zh-CN   Kimi 用量罗盘
 // @namespace    https://github.com/JasonWenTheFox
-// @version      0.8.1
+// @version      0.8.2
 // @description  Kimi membership quota panel: monthly pool, Kimi Code 5h/7d windows, per-action ledger with full-cycle backfill, cycle snapshots and CSV/JSON export
 // @description:zh-CN  Kimi 会员用量面板：月度额度池、Kimi Code 5小时/7天窗口、逐条额度流水（支持全周期回填、周期快照与导出）
 // @author       JW
@@ -39,10 +39,12 @@
     planLabel: { zh: "订阅套餐", en: "Plan" },
     planNone: { zh: "未选择（可选）", en: "not set (optional)" },
     planOld: { zh: "已实测", en: "measured" },
+    planExtrap: { zh: "按倍数推算", en: "extrapolated" },
     planNew: { zh: "未实测", en: "not measured" },
-    planHintOld: { zh: "老套餐：参考值来自实测（Code ¥21、其他 ¥6 / 每 1%）。", en: "Old plans: measured defaults (Code ¥21, other ¥6 per 1%)." },
+    planHintOld: { zh: "参考值：Allegretto 为实测（Code ¥21 / 其他 ¥6 每 1%）；其余老档位按官方额度倍数等比推算，未实测。", en: "Defaults: Allegretto is measured (Code ¥21 / other ¥6 per 1%); other old tiers are extrapolated from the official quota multipliers, not measured." },
     planHintNew: { zh: "新套餐取消了 Code 额度补贴，老套餐的参考值不适用；请自行校准，或留空不显示金额。", en: "New plans dropped the Code quota discount, so the old defaults do not apply. Calibrate yourself or leave blank." },
     fillRef: { zh: "填入参考值", en: "Fill defaults" },
+    rateManualHint: { zh: "当前为自定义值；切换套餐不会覆盖，点「填入参考值」可重置。", en: "Custom values; switching plans will not overwrite them. Use Fill defaults to reset." },
     rateEmptyHint: { zh: "留空则不显示任何金额。", en: "Leave blank to hide all amounts." },
     noRecord: { zh: "官方终值未捕获", en: "official end value not captured" },
     localOnly: { zh: "本地已记录 {v}（非周期总量）", en: "local ledger {v} (not the cycle total)" },
@@ -541,19 +543,25 @@
   const LEGACY_POOL_KEY = "kqc_pool_value_cny";
   const LEGACY_POOL_USD_KEY = "kqc_pool_value_usd";
   const PLAN_KEY = "kqc_plan";
+  // 用户手动改过费率后置 1：切换套餐不再覆盖，避免把自校准值冲掉
+  const RATE_MANUAL_KEY = "kqc_rate_manual";
 
   // 套餐只用来给"参考值"和实测/未实测标记，本身不参与计算
+  // 参考值只对 Allegretto 实测过（Code 21 / 其他 6）。
+  // 其余老档位按"Code 月额度倍数"（第三方口径 28M/108M/540M/1600M）等比推算：
+  // rate = 21 × (该档 Code 额度 / Allegretto 540M)；"其他"按实测比例 code/3.5。
+  // 新套餐取消了 Code 补贴，不适用这套倍数，因此不给参考值。
   const PLANS = [
-    { id: "andante", group: "old", label: "Andante ¥49" },
-    { id: "moderato", group: "old", label: "Moderato ¥99" },
-    { id: "allegretto", group: "old", label: "Allegretto ¥199" },
-    { id: "allegro", group: "old", label: "Allegro ¥699" },
-    { id: "go", group: "new", label: "Go ¥49" },
-    { id: "plus", group: "new", label: "Plus ¥99" },
-    { id: "pro", group: "new", label: "Pro ¥199" },
-    { id: "max", group: "new", label: "Max ¥699" },
-    { id: "ultra", group: "new", label: "Ultra ¥1399" },
-    { id: "custom", group: "custom", label: "自定义" },
+    { id: "andante", group: "old", label: "Andante ¥49", ref: { c: 1.1, o: 0.3 }, measured: false },
+    { id: "moderato", group: "old", label: "Moderato ¥99", ref: { c: 4.2, o: 1.2 }, measured: false },
+    { id: "allegretto", group: "old", label: "Allegretto ¥199", ref: { c: 21, o: 6 }, measured: true },
+    { id: "allegro", group: "old", label: "Allegro ¥699", ref: { c: 62, o: 18 }, measured: false },
+    { id: "go", group: "new", label: "Go ¥49", ref: null, measured: false },
+    { id: "plus", group: "new", label: "Plus ¥99", ref: null, measured: false },
+    { id: "pro", group: "new", label: "Pro ¥199", ref: null, measured: false },
+    { id: "max", group: "new", label: "Max ¥699", ref: null, measured: false },
+    { id: "ultra", group: "new", label: "Ultra ¥1399", ref: null, measured: false },
+    { id: "custom", group: "custom", label: "自定义", ref: null, measured: false },
   ];
   const planInfo = () => PLANS.find((p) => p.id === pageWindow.localStorage.getItem(PLAN_KEY)) || null;
 
@@ -782,12 +790,16 @@
       `<option value="">${esc(t("planNone"))}</option>`,
       ...PLANS.map((p) => `<option value="${esc(p.id)}" ${plan && plan.id === p.id ? "selected" : ""}>${esc(p.label)}</option>`),
     ].join("");
-    const planBadge =
-      planGroup === "old"
+    const planBadge = !plan
+      ? ""
+      : plan.measured
         ? `<span class="kqc-pill" style="background:#e6f7ec;color:#1e7e43">${esc(t("planOld"))}</span>`
-        : planGroup === "new"
-          ? `<span class="kqc-pill" style="background:#f0f0f0;color:#888">${esc(t("planNew"))}</span>`
-          : "";
+        : planGroup === "old"
+          ? `<span class="kqc-pill" style="background:#fff4e5;color:#a56b00">${esc(t("planExtrap"))}</span>`
+          : planGroup === "new"
+            ? `<span class="kqc-pill" style="background:#f0f0f0;color:#888">${esc(t("planNew"))}</span>`
+            : "";
+    const rateManual = pageWindow.localStorage.getItem(RATE_MANUAL_KEY) === "1";
     const planHint = planGroup === "old" ? t("planHintOld") : planGroup === "new" ? t("planHintNew") : t("rateHint");
 
     const canaryBanner = pageWindow.__KQC.streamUsageDetected ? `<div class="kqc-canary">⚠ ${esc(t("canary"))}</div>` : "";
@@ -823,11 +835,11 @@
           <div class="kqc-label" style="line-height:1.5">${esc(planHint)}</div>
           <div class="kqc-label" style="margin-top:8px;border-top:1px solid #eee;padding-top:6px">${t("rateNote")}<span class="kqc-tip">!<span class="kqc-tipbox">${t("tipBody")}</span></span></div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px">
-            <label>Code <input class="kqc-input" id="kqc-rate-code" type="number" step="1" placeholder="—" value="${rateCode() == null ? "" : rateCode()}"></label>
-            <label>${LANG === "zh" ? "其他" : "Other"} <input class="kqc-input" id="kqc-rate-other" type="number" step="1" placeholder="—" value="${rateOther() == null ? "" : rateOther()}"></label>
-            ${planGroup === "old" ? `<button class="kqc-btn2" id="kqc-fill">${t("fillRef")}</button>` : ""}
+            <label>Code <input class="kqc-input" id="kqc-rate-code" type="number" step="0.1" min="0" placeholder="—" value="${rateCode() == null ? "" : rateCode()}"></label>
+            <label>${LANG === "zh" ? "其他" : "Other"} <input class="kqc-input" id="kqc-rate-other" type="number" step="0.1" min="0" placeholder="—" value="${rateOther() == null ? "" : rateOther()}"></label>
+            ${plan && plan.ref ? `<button class="kqc-btn2" id="kqc-fill">${t("fillRef")}${plan.measured ? "" : " *"}</button>` : ""}
           </div>
-          <div class="kqc-label" style="margin-top:4px;color:#aaa">${esc(t("rateEmptyHint"))}</div>
+          <div class="kqc-label" style="margin-top:4px;color:#aaa">${esc(rateManual ? t("rateManualHint") : t("rateEmptyHint"))}</div>
         </div>
         <div class="kqc-card"><div class="kqc-label">${t("w5h")}</div>
           <div class="kqc-value">${pct(stats?.ratelimitCode5h?.ratio ?? 0)}</div>
@@ -871,19 +883,28 @@
       plSel.onchange = () => {
         if (plSel.value) pageWindow.localStorage.setItem(PLAN_KEY, plSel.value);
         else pageWindow.localStorage.removeItem(PLAN_KEY);
-        // 选了老套餐且费率还空着时，顺手填上实测参考值
-        const info = planInfo();
-        if (info && info.group === "old" && rateCode() == null && rateOther() == null) {
-          pageWindow.localStorage.setItem(RATE_CODE_KEY, "21");
-          pageWindow.localStorage.setItem(RATE_OTHER_KEY, "6");
+        // 没手动改过费率时，切换套餐就跟着换成该档参考值（新套餐没有参考值则清空）
+        if (pageWindow.localStorage.getItem(RATE_MANUAL_KEY) !== "1") {
+          const info = planInfo();
+          if (info && info.ref) {
+            pageWindow.localStorage.setItem(RATE_CODE_KEY, String(info.ref.c));
+            pageWindow.localStorage.setItem(RATE_OTHER_KEY, String(info.ref.o));
+          } else {
+            pageWindow.localStorage.removeItem(RATE_CODE_KEY);
+            pageWindow.localStorage.removeItem(RATE_OTHER_KEY);
+          }
         }
         renderPanel(stats, usages, sub);
       };
     const fillBtn = document.getElementById("kqc-fill");
     if (fillBtn)
       fillBtn.onclick = () => {
-        pageWindow.localStorage.setItem(RATE_CODE_KEY, "21");
-        pageWindow.localStorage.setItem(RATE_OTHER_KEY, "6");
+        const info = planInfo();
+        if (info && info.ref) {
+          pageWindow.localStorage.setItem(RATE_CODE_KEY, String(info.ref.c));
+          pageWindow.localStorage.setItem(RATE_OTHER_KEY, String(info.ref.o));
+        }
+        pageWindow.localStorage.removeItem(RATE_MANUAL_KEY); // 重新跟随套餐
         renderPanel(stats, usages, sub);
       };
     const rc = document.getElementById("kqc-rate-code");
@@ -892,6 +913,7 @@
         const v = Number(rc.value);
         if (v > 0) pageWindow.localStorage.setItem(RATE_CODE_KEY, String(v));
         else pageWindow.localStorage.removeItem(RATE_CODE_KEY);
+        pageWindow.localStorage.setItem(RATE_MANUAL_KEY, "1");
         renderPanel(stats, usages, sub);
       };
     const ro = document.getElementById("kqc-rate-other");
@@ -900,6 +922,7 @@
         const v = Number(ro.value);
         if (v > 0) pageWindow.localStorage.setItem(RATE_OTHER_KEY, String(v));
         else pageWindow.localStorage.removeItem(RATE_OTHER_KEY);
+        pageWindow.localStorage.setItem(RATE_MANUAL_KEY, "1");
         renderPanel(stats, usages, sub);
       };
   }
