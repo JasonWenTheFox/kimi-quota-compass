@@ -2,9 +2,9 @@
 // @name         Kimi Quota Compass
 // @name:zh-CN   Kimi 用量罗盘
 // @namespace    https://github.com/JasonWenTheFox
-// @version      0.8.2
-// @description  Kimi membership quota panel: monthly pool, Kimi Code 5h/7d windows, per-action ledger with full-cycle backfill, cycle snapshots and CSV/JSON export
-// @description:zh-CN  Kimi 会员用量面板：月度额度池、Kimi Code 5小时/7天窗口、逐条额度流水（支持全周期回填、周期快照与导出）
+// @version      0.9.0
+// @description  Kimi membership quota panel: monthly pool, Kimi Code 5h/7d windows, per-action ledger with full-cycle backfill, cycle snapshots, suspected official reset grants, and CSV/JSON export
+// @description:zh-CN  Kimi 会员用量面板：月度额度池、Kimi Code 5小时/7天窗口、逐条额度流水（支持全周期回填、周期快照、疑似官方重置与额度增量、导出）
 // @author       JW
 // @match        https://www.kimi.com/*
 // @match        https://kimi.com/*
@@ -57,6 +57,37 @@
     w7d: { zh: "Code 7 天窗口", en: "Code 7d window" },
     quotaUnits: { zh: "{u} / {l}（内部额度单位）· 剩余 {r}", en: "{u} / {l} (internal quota units) · {r} left" },
     resetAt: { zh: "重置时间：{v}（本地时区）", en: "Resets: {v} (local)" },
+    monthlyUsedOfficialCurrent: { zh: "月度额度池已用（官方当前）", en: "Monthly pool used (official now)" },
+    cycleCumulative: { zh: "本周期累计 {used} / 总额度 {limit}（{rate}）", en: "Cycle total {used} / limit {limit} ({rate})" },
+    cycleCumulativeLabel: { zh: "本周期累计", en: "Cycle total" },
+    cycleLimitOnly: { zh: "总额度 {limit} · {n} 次重置", en: "Cycle limit {limit} · {n} reset(s)" },
+    cycleTotalTag: { zh: "累计 {used} / 额度 {limit}", en: "total {used} / limit {limit}" },
+    cumulativeBreakdown: { zh: "本周期累计明细（含重置前）", en: "cycle total breakdown (incl. pre-reset)" },
+    officialCumulative: { zh: "官方累计", en: "official total" },
+    cycleRange: { zh: "本周期：{v}", en: "Cycle: {v}" },
+    cycleDays: { zh: "{v} 天", en: "{v} days" },
+    lastSuspectedReset: { zh: "本次疑似官方重置：{v}", en: "Suspected official reset: {v}" },
+    nextBilling: { zh: "下个标准账单日：{v}", en: "Next billing day: {v}" },
+    cycleEndLine: { zh: "本周期结束：{v}", en: "Cycle ends: {v}" },
+    resetLog: { zh: "重置记录", en: "Reset log" },
+    resetCount: { zh: "{n} 次", en: "{n} time(s)" },
+    suspectedReset: { zh: "疑似官方重置", en: "suspected official reset" },
+    resetCancelled: { zh: "已取消", en: "cancelled" },
+    resetSourceSnapshot: { zh: "快照捕获", en: "captured by snapshot" },
+    resetSourceLedger: { zh: "本地推断", en: "inferred locally" },
+    resetTimeUnknown: { zh: "检测到重置，实际时间未知", en: "reset detected, exact time unknown" },
+    resetDetectedAt: { zh: "检测于 {v}", en: "detected at {v}" },
+    resetBracket: { zh: "{from} → {to}", en: "{from} → {to}" },
+    resetAmount: { zh: "+{v}", en: "+{v}" },
+    resetCodeAmount: { zh: "Code +{v}", en: "Code +{v}" },
+    cancelResetBtn: { zh: "取消此重置", en: "Cancel reset" },
+    restoreResetBtn: { zh: "恢复", en: "Restore" },
+    cancelResetConfirm: {
+      zh: "确定取消这次「疑似官方重置」吗？\n\n请先核对 Kimi 官方公告 / 新闻，确认这次不是官方重置。取消后，这次额度增量将不再计入本周期总额度；快照和流水记录会保留，之后可以恢复。",
+      en: "Cancel this suspected official reset?\n\nCheck Kimi's official announcement/news first and confirm this was not an official reset. The quota grant will no longer count toward this cycle; snapshots and ledger evidence are kept and can be restored later.",
+    },
+    resetDismissedWarn: { zh: "已取消；本地明细仍比官方多 {v}，如果这不是退款，可能还有未记录的重置。", en: "Cancelled; local ledger is still {v} above the official reading. If this was not a refund, another reset may be unrecorded." },
+    officialEndValue: { zh: "官方期末读数 {v}", en: "official end value {v}" },
     ofWhich: { zh: "其中", en: "of which" },
     estShort: { zh: "估算 {v}", en: "est. {v}" },
     ledger: { zh: "额度流水", en: "Balance actions" },
@@ -78,13 +109,13 @@
       en: "Token usage detected in Kimi web responses - check for script updates",
     },
     footer: {
-      zh: "流水来自 Kimi 服务器（每页 20 条，插件已按 pageToken 自动翻页回填）。服务端只保留当前计费周期，历史只能靠本地累积，因此每周期会写入一份官方快照。5h/7d 的 used/limit 为内部额度单位，非 Token。金额为按公开牌价折算的估算值。",
-      en: "Actions come from Kimi's server (20 per page; the script follows pageToken to backfill). The server keeps only the current cycle, so cycles are snapshotted locally. 5h/7d used/limit are internal quota units, not tokens. Amounts are estimates at public list prices.",
+      zh: "流水来自 Kimi 服务器（每页 20 条，插件已按 pageToken 自动翻页回填）。服务端只保留当前计费周期，历史只能靠本地累积，因此每周期会写入一份官方快照。若官方在周期中重置额度，插件会记录「疑似官方重置」并把实际降幅加回本周期总额度；官方当前读数仍以接口为准。5h/7d 的 used/limit 为内部额度单位，非 Token。金额为按公开牌价折算的估算值。",
+      en: "Actions come from Kimi's server (20 per page; the script follows pageToken to backfill). The server keeps only the current cycle, so cycles are snapshotted locally. If Kimi resets quota mid-cycle, the script logs a suspected official reset and adds the observed drop to the cycle limit; the official current reading still comes from the API. 5h/7d used/limit are internal quota units, not tokens. Amounts are estimates at public list prices.",
     },
     loading: { zh: "加载中…", en: "loading..." },
     err: { zh: "KQC 错误", en: "KQC error" },
     noLogin: { zh: "未找到 access_token，请先登录 Kimi", en: "access_token not found (not logged in?)" },
-    exported: { zh: "已导出 {n} 条流水、{m} 条快照", en: "Exported {n} actions, {m} snapshots" },
+    exported: { zh: "已导出 {n} 条流水、{m} 条快照、{r} 条重置事件", en: "Exported {n} actions, {m} snapshots, {r} reset events" },
     tipBody: {
       zh: `<b>这是什么？</b>官方接口只提供百分比，不提供金额。<br><br><b>换算方式：</b>金额 = 额度百分比 × 每 1% 的 API 等价值。<br>用真实请求反推：Kimi Code 每 1% 约合公开 API 价 ¥21；网页 Agent / Kimi Work 类每 1% 约 ¥3–9（同样 token 量下扣费更高）。<br><br><b>K3 公开 API 价目</b>（每百万 token）：缓存命中 ¥2 / 未命中 ¥20 / 输出 ¥100。k3 在上下文超过 256K 后额度消耗约翻倍。<br><br>不同功能、不同缓存命中率的换算差别很大，全部金额仅为估算。`,
       en: `<b>What is this?</b> Official APIs only expose percentages, never amounts.<br><br><b>Conversion:</b> amount = quota % × API-equivalent value per 1%.<br>Measured from real requests: ~¥21 per 1% for Kimi Code; ~¥3–9 per 1% for web Agent / Kimi Work (same tokens cost more quota there).<br><br><b>K3 public API pricing</b> (per 1M tokens): cache hit ¥2 / miss ¥20 / output ¥100. k3 roughly doubles quota use above 256K context.<br><br>Rates differ per feature and cache-hit ratio; every amount is an estimate.`,
@@ -186,11 +217,12 @@
   const S_ACTIONS = "actions";
   const S_SNAPSHOTS = "snapshots";
   const S_CYCLES = "cycles";
-  const STORE_DB = { [S_ACTIONS]: DB_LEDGER, [S_SNAPSHOTS]: DB_META, [S_CYCLES]: DB_META };
+  const S_RESETS = "resets";
+  const STORE_DB = { [S_ACTIONS]: DB_LEDGER, [S_SNAPSHOTS]: DB_META, [S_CYCLES]: DB_META, [S_RESETS]: DB_META };
 
   const openCache = {};
 
-  const NEEDED_STORES = { [DB_LEDGER]: [S_ACTIONS], [DB_META]: [S_SNAPSHOTS, S_CYCLES] };
+  const NEEDED_STORES = { [DB_LEDGER]: [S_ACTIONS], [DB_META]: [S_SNAPSHOTS, S_CYCLES, S_RESETS] };
 
   function createStores(db, name) {
     const need = NEEDED_STORES[name] || [];
@@ -198,6 +230,7 @@
       if (db.objectStoreNames.contains(st)) continue;
       if (st === S_ACTIONS) db.createObjectStore(st, { keyPath: "id" });
       else if (st === S_SNAPSHOTS) db.createObjectStore(st, { keyPath: "ts" }).createIndex("cycle", "cycle");
+      else if (st === S_RESETS) db.createObjectStore(st, { keyPath: "key" });
       else db.createObjectStore(st, { keyPath: "cycle" });
     }
   }
@@ -277,6 +310,31 @@
       for (const e of entries) st.put(e);
       tx.oncomplete = () => res(entries.length);
       tx.onerror = () => rej(tx.error);
+    });
+  }
+
+  // 同一周期最后一条快照：用来做“重置前 vs 重置后”的比较。
+  // 优先走 cycle 索引的 prev 游标，避免每次把整张快照表读进内存。
+  async function dbGetLastSnapshot(cycle) {
+    if (!cycle) return null;
+    const db = await dbOpenFor(S_SNAPSHOTS);
+    const store = db.transaction(S_SNAPSHOTS, "readonly").objectStore(S_SNAPSHOTS);
+    if (!store.indexNames.contains("cycle")) {
+      const all = await dbGetAll(S_SNAPSHOTS);
+      return (
+        all
+          .filter((s) => s.cycle === cycle)
+          .sort((a, b) => (a.ts < b.ts ? 1 : -1))[0] || null
+      );
+    }
+    return new Promise((res, rej) => {
+      const Range = pageWindow.IDBKeyRange || IDBKeyRange;
+      const rq = store.index("cycle").openCursor(Range.only(cycle), "prev");
+      rq.onsuccess = () => {
+        const c = rq.result;
+        res(c ? c.value : null);
+      };
+      rq.onerror = () => rej(rq.error);
     });
   }
 
@@ -384,9 +442,159 @@
 
   // ---------- snapshots ----------
   // 官方百分比只有"当下"，重置即消失。每页面加载/刷新都写一条快照（按分钟去重），
-  // 检测到计费周期切换时，把上一个周期的最后一条快照固化为终值。
+  // 同一周期内官方读数突然下降时，记一条"疑似官方重置"及其额度增量。
   const SNAP_MIN_MS = 60 * 1000;
   let lastSnapAt = 0;
+
+  // 重置识别：全额归零看绝对降幅，部分重置看降幅 + 相对比例。
+  const RESET_MIN_BEFORE = 0.005; // 0.5pp 以下不值得记
+  const RESET_FULL_AFTER = 0.001; // 0.1pp 以内视作归零
+  const RESET_PARTIAL_MIN = 0.05; // 5pp
+  const RESET_PARTIAL_REL = 0.25; // 前值的 25%
+  // 正常月切前后 48 小时内不记"月中重置"，等 currentStartTime 变化
+  const RESET_BOUNDARY_GUARD_MS = 48 * 3600 * 1000;
+  // 两条快照相隔 1 小时以内才认为时间"精确"
+  const RESET_PRECISE_MS = 60 * 60 * 1000;
+  // 本地流水合计与官方读数的差额超过 0.5pp 才当作未记录的增量
+  const GRANT_RECONCILE_MIN = 0.005;
+
+  const isoOf = (ms) => new Date(ms).toISOString();
+  const resetKeyOf = (cycle, atIso) => `${cycle || ""}|${atIso || ""}`;
+
+  function isGrantDrop(prev, cur) {
+    if (!prev || !cur || prev.cycle !== cur.cycle) return false;
+    const before = Number(prev.used) || 0;
+    const after = Number(cur.used) || 0;
+    const drop = before - after;
+    if (before < RESET_MIN_BEFORE) return false;
+    if (after <= RESET_FULL_AFTER) return true;
+    return drop >= RESET_PARTIAL_MIN && drop >= RESET_PARTIAL_REL * before;
+  }
+
+  function isNearCycleBoundary(snap, fallbackEnd) {
+    if (!snap) return false;
+    const endIso = snap.cycleEnd || fallbackEnd;
+    if (!endIso) return false;
+    const end = Date.parse(endIso);
+    return !isNaN(end) && Math.abs(end - snap.at) <= RESET_BOUNDARY_GUARD_MS;
+  }
+
+  async function findOverlappingReset(cycle, fromAt, toAt) {
+    const all = await dbGetAll(S_RESETS);
+    const f = Date.parse(fromAt);
+    const t = Date.parse(toAt);
+    return (
+      all.find((r) => {
+        if (r.cycle !== cycle) return false;
+        const rf = Date.parse((r.bracket && r.bracket.fromAt) || r.at);
+        const rt = Date.parse((r.bracket && r.bracket.toAt) || r.at);
+        if (isNaN(rf) || isNaN(rt)) return false;
+        return rf <= t && rt >= f;
+      }) || null
+    );
+  }
+
+  // 快照里抓到的下降：记录"重置前最高的读数 → 重置后最低的读数"。
+  // 多标签页可能各自看到相邻区间，用重叠合并，避免同一事件记两条。
+  async function recordGrantEvent(prev, cur) {
+    const cycle = cur.cycle;
+    if (!cycle) return null;
+    const fromAt = isoOf(prev.at);
+    const toAt = isoOf(cur.at);
+    let existing = await findOverlappingReset(cycle, fromAt, toAt);
+    // 已取消的事件只接受"同一事件"的重扫；如果新下降明显更晚，说明是另一次重置，
+    // 不能把它并进已取消的记录里，否则新重置会被静默吃掉。
+    if (existing && existing.dismissed) {
+      const oldTo = Date.parse((existing.bracket && existing.bracket.toAt) || existing.at);
+      if (!isNaN(oldTo) && Date.parse(toAt) - oldTo > 10 * 60 * 1000) existing = null;
+    }
+    const oldFrom = existing && existing.bracket ? Date.parse(existing.bracket.fromAt) : NaN;
+    const oldTo = existing && existing.bracket ? Date.parse(existing.bracket.toAt) : NaN;
+    const mergedFrom = Math.min(isNaN(oldFrom) ? Date.parse(fromAt) : oldFrom, Date.parse(fromAt));
+    const mergedTo = Math.max(isNaN(oldTo) ? Date.parse(toAt) : oldTo, Date.parse(toAt));
+    const fromUsed = Math.max(
+      Number(existing && existing.bracket && existing.bracket.fromUsed) || 0,
+      Number(prev.used) || 0,
+    );
+    const toUsed = Math.min(
+      existing && existing.bracket && existing.bracket.toUsed != null ? Number(existing.bracket.toUsed) : 1,
+      Number(cur.used) || 0,
+    );
+    const amount = Math.max(0, fromUsed - toUsed);
+    const codeAmount = Math.max(
+      Number(existing && existing.codeAmount) || 0,
+      Math.max(0, (Number(prev.code) || 0) - (Number(cur.code) || 0)),
+    );
+    const existingAt = existing && existing.at ? Date.parse(existing.at) : NaN;
+    const atMs = Math.min(isNaN(existingAt) ? Date.parse(toAt) : existingAt, Date.parse(toAt));
+    const bracketMs = mergedTo - mergedFrom;
+    const rec = {
+      key: existing ? existing.key : resetKeyOf(cycle, toAt),
+      cycle,
+      at: isoOf(atMs),
+      bracket: {
+        fromAt: isoOf(mergedFrom),
+        fromUsed,
+        toAt: isoOf(mergedTo),
+        toUsed,
+      },
+      amount,
+      codeAmount,
+      source: "snapshot",
+      confidence: bracketMs <= RESET_PRECISE_MS ? "high" : "low",
+      detectedAt: (existing && existing.detectedAt) || new Date().toISOString(),
+      dismissed: !!(existing && existing.dismissed),
+      note: (existing && existing.note) || "",
+      h5: cur.h5 != null ? cur.h5 : existing ? existing.h5 : null,
+      d7: cur.d7 != null ? cur.d7 : existing ? existing.d7 : null,
+      balanceId: cur.balanceId || (existing && existing.balanceId) || null,
+    };
+    await dbPut(S_RESETS, rec);
+    debug(`grant event: +${(amount * 100).toFixed(2)}pp (${rec.confidence})`);
+    return rec;
+  }
+
+  // 回推历史快照里的跳水：用户升级脚本时，最新快照可能已经是重置后的 0%，
+  // 只在“写新快照”时比较上一条会漏掉这次重置。启动和打开面板时各扫一遍，幂等。
+  async function syncGrantEventsFromSnapshots(snaps, curCycle, curCycleEnd) {
+    if (!Array.isArray(snaps) || snaps.length < 2) return 0;
+    const byCycle = {};
+    for (const s of snaps) {
+      if (!s || !s.cycle || s.at == null) continue;
+      (byCycle[s.cycle] = byCycle[s.cycle] || []).push(s);
+    }
+    let found = 0;
+    for (const cycle of Object.keys(byCycle)) {
+      const own = byCycle[cycle].sort((a, b) => a.at - b.at);
+      const fallbackEnd = cycle === curCycle ? curCycleEnd : null;
+      for (let i = 1; i < own.length; i++) {
+        const prev = own[i - 1];
+        const cur = own[i];
+        if (!isGrantDrop(prev, cur)) continue;
+        if (isNearCycleBoundary(cur, fallbackEnd)) continue;
+        await recordGrantEvent(prev, cur).catch((e) => debug("sync grant err: " + e));
+        found++;
+      }
+    }
+    if (found) debug(`grant sync: ${found} drop(s) checked`);
+    return found;
+  }
+
+  async function bootstrapGrantsFromSnapshots() {
+    try {
+      const [snaps, sub] = await Promise.all([
+        dbGetAll(S_SNAPSHOTS),
+        apiPost(API.sub).catch(() => null),
+      ]);
+      const startIso = sub && sub.subscription && sub.subscription.currentStartTime;
+      const curCycle = startIso ? cycleOf(startIso) : null;
+      const endIso =
+        (sub && sub.subscription && (sub.subscription.nextBillingTime || sub.subscription.currentEndTime)) || null;
+      await syncGrantEventsFromSnapshots(snaps, curCycle, endIso);
+    } catch (e) {
+      debug("bootstrap grants err: " + e);
+    }
+  }
 
   async function recordSnapshot(stats, sub) {
     const bal = stats && stats.subscriptionBalance;
@@ -402,28 +610,114 @@
     pageWindow.__KQC.lastSnapCycle = cycle;
 
     const minute = new Date(now).toISOString().slice(0, 16);
+    const cycleEnd =
+      (sub && sub.subscription && (sub.subscription.nextBillingTime || sub.subscription.currentEndTime)) ||
+      (bal && bal.expireTime) ||
+      null;
     const rec = {
       // 主键带上周期：跨周期同一分钟的两条快照不会互相覆盖
       ts: cycle ? `${cycle}|${minute}` : minute,
       minute,
       cycle,
       cycleStart: startIso || null,
+      cycleEnd,
       used: Number(bal.amountUsedRatio) || 0,
       code: Number(bal.kimiCodeUsedRatio) || 0,
+      h5: Number(stats && stats.ratelimitCode5h && stats.ratelimitCode5h.ratio) || 0,
+      d7: Number(stats && stats.ratelimitCode7d && stats.ratelimitCode7d.ratio) || 0,
+      balanceId: bal.id || null,
+      planTitle: (sub && sub.subscription && sub.subscription.goods && sub.subscription.goods.title) || null,
       at: now,
     };
     try {
+      // 先读同周期最后一条，再写本次快照：这样比较的是"写之前"的状态
+      const prev = await dbGetLastSnapshot(cycle).catch(() => null);
       await dbPut(S_SNAPSHOTS, rec);
+      if (prev && isGrantDrop(prev, rec) && !isNearCycleBoundary(rec)) {
+        await recordGrantEvent(prev, rec).catch((e) => debug("grant err: " + e));
+      }
       if (startIso) await closePreviousCycle(startIso);
     } catch (e) {
       debug("snapshot err: " + e);
     }
   }
 
+  // 本地流水合计应该 ≈ 官方当前已用 + 历次增量。
+  // 差额明显大于已记录增量时，补一条（或校正最近一条）"本地推断"的重置事件。
+  async function reconcileGrants(cycle, officialUsed, officialCode, entries) {
+    if (!cycle || officialUsed == null) return;
+    const local = entries.filter((e) => ((e.status || "DONE") === "DONE") && cycleOf(e.timestamp) === cycle);
+    const localSum = local.reduce((a, e) => a + (Number(e.ratio) || 0), 0);
+    const localCode = local
+      .filter((e) => e.feature === "CODING")
+      .reduce((a, e) => a + (Number(e.ratio) || 0), 0);
+    const grantInv = Math.max(0, localSum - officialUsed);
+    if (grantInv < GRANT_RECONCILE_MIN) return;
+    const all = await dbGetAll(S_RESETS);
+    const owns = all.filter((r) => r.cycle === cycle);
+    const explained = owns.reduce((a, r) => a + (Number(r.amount) || 0), 0);
+    const delta = grantInv - explained;
+    if (delta <= GRANT_RECONCILE_MIN) return;
+    const codeInv = Math.max(0, localCode - (officialCode == null ? 0 : Number(officialCode)));
+    const codeExplained = owns.reduce((a, r) => a + (Number(r.codeAmount) || 0), 0);
+    const codeDelta = Math.max(0, codeInv - codeExplained);
+    const codeAdd = codeDelta > GRANT_RECONCILE_MIN ? codeDelta : 0;
+    const active = owns.filter((r) => !r.dismissed).sort((a, b) => (a.at < b.at ? -1 : 1));
+    const nowIso = new Date().toISOString();
+    const latest = active[active.length - 1];
+    const recent = latest && Math.abs(Date.now() - Date.parse(latest.at)) < 60 * 60 * 1000;
+    // 只有一条快照事件时，小差额当作同一事件漏记（重置后的用量落在两次快照之间）；
+    // 大差额且事件较旧，说明可能是另一次没被快照抓到的重置。
+    const canCorrect = latest && (recent || (active.length === 1 && delta < 0.05));
+    if (canCorrect) {
+      latest.amount = (Number(latest.amount) || 0) + delta;
+      latest.codeAmount = (Number(latest.codeAmount) || 0) + codeAdd;
+      latest.note = "按本地流水差额校正";
+      latest.correctedAt = nowIso;
+      await dbPut(S_RESETS, latest);
+      debug(`grant corrected: +${(delta * 100).toFixed(2)}pp`);
+    } else {
+      const rec = {
+        key: resetKeyOf(cycle, nowIso),
+        cycle,
+        at: nowIso,
+        bracket: null,
+        amount: delta,
+        codeAmount: codeAdd,
+        source: "ledger",
+        confidence: "low",
+        detectedAt: nowIso,
+        dismissed: false,
+        note: "按本地流水差额推断",
+        h5: null,
+        d7: null,
+        balanceId: null,
+      };
+      await dbPut(S_RESETS, rec);
+      debug(`grant inferred: +${(delta * 100).toFixed(2)}pp`);
+    }
+  }
+
+  async function refreshCycleRecord(cycle) {
+    const rec = await dbGet(S_CYCLES, cycle);
+    if (!rec) return;
+    const all = await dbGetAll(S_RESETS);
+    const active = all.filter((r) => r.cycle === cycle && !r.dismissed);
+    const totalGranted = active.reduce((a, r) => a + (Number(r.amount) || 0), 0);
+    const totalCodeGranted = active.reduce((a, r) => a + (Number(r.codeAmount) || 0), 0);
+    rec.totalGranted = totalGranted;
+    rec.totalCodeGranted = totalCodeGranted;
+    rec.totalConsumed = (Number(rec.used) || 0) + totalGranted;
+    rec.effectiveLimit = 1 + totalGranted;
+    rec.resetCount = active.length;
+    await dbPut(S_CYCLES, rec);
+  }
+
   async function closePreviousCycle(currentStart) {
     const snaps = await dbGetAll(S_SNAPSHOTS);
     if (!snaps.length) return;
     const starts = [...new Set(snaps.map((s) => s.cycleStart || s.cycle).filter(Boolean))].sort();
+    const resetsAll = await dbGetAll(S_RESETS).catch(() => []);
     for (const c of starts) {
       if (c >= currentStart) continue;
       const key = cycleKeyOf(c);
@@ -433,12 +727,21 @@
         .sort((a, b) => (a.ts < b.ts ? -1 : 1));
       if (!own.length) continue;
       const last = own[own.length - 1];
+      const active = resetsAll.filter((r) => r.cycle === key && !r.dismissed);
+      const totalGranted = active.reduce((a, r) => a + (Number(r.amount) || 0), 0);
+      const totalCodeGranted = active.reduce((a, r) => a + (Number(r.codeAmount) || 0), 0);
       await dbPut(S_CYCLES, {
         cycle: key,
         cycleStart: c,
+        cycleEnd: currentStart || last.cycleEnd || null,
         closedAt: last.ts,
         used: last.used,
         code: last.code,
+        totalGranted,
+        totalCodeGranted,
+        totalConsumed: (Number(last.used) || 0) + totalGranted,
+        effectiveLimit: 1 + totalGranted,
+        resetCount: active.length,
         samples: own.length,
       });
       debug("cycle closed: " + key);
@@ -506,13 +809,57 @@
     return ruleCycleOf(isoLike);
   }
 
-  const cycleLabel = (key) => {
+  // 官方周期是按天算的（这次是 10/19 10:02 → 11/18 10:02，刚好 30 天），
+  // 不能按"自然月 +1"推，否则会多显示一天。历史周期没有 cycleEnd 时退回 +30 天。
+  const DAY_MS = 86400000;
+  function cycleBounds(key, cyclesMap, curCycle, sub) {
+    let start = null;
+    let end = null;
+    if (key === curCycle && sub && sub.subscription) {
+      start = sub.subscription.currentStartTime || null;
+      end = sub.subscription.nextBillingTime || sub.subscription.currentEndTime || null;
+    }
+    const rec = cyclesMap && cyclesMap[key];
+    if (!start && rec && rec.cycleStart) start = rec.cycleStart;
+    if (!end && rec && rec.cycleEnd) end = rec.cycleEnd;
+    if (!start) start = key + "T00:00:00Z";
+    if (!end) end = new Date(Date.parse(start) + 30 * DAY_MS).toISOString();
+    return { start, end };
+  }
+  function cycleLabel(key, cyclesMap, curCycle, sub) {
     if (!key) return "-";
-    const next = new Date(key + "T00:00:00Z");
-    next.setUTCMonth(next.getUTCMonth() + 1);
-    const f = (d) => `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
-    return `${f(new Date(key + "T00:00:00Z"))} – ${f(next)}`;
-  };
+    const { start, end } = cycleBounds(key, cyclesMap, curCycle, sub);
+    return `${fmtLocal(start).slice(5, 10)} – ${fmtLocal(end).slice(5, 10)}`;
+  }
+  function cycleRangeText(key, cyclesMap, curCycle, sub) {
+    if (!key) return "-";
+    const { start, end } = cycleBounds(key, cyclesMap, curCycle, sub);
+    const days = Math.max(1, Math.round((Date.parse(end) - Date.parse(start)) / DAY_MS));
+    return `${fmtLocal(start).slice(5)} – ${fmtLocal(end).slice(5)}（${t("cycleDays", { v: days })}）`;
+  }
+
+  function resetIsPrecise(r) {
+    if (!r || !r.bracket) return false;
+    const f = Date.parse(r.bracket.fromAt);
+    const to = Date.parse(r.bracket.toAt);
+    return r.confidence === "high" && !isNaN(f) && !isNaN(to) && to - f <= RESET_PRECISE_MS;
+  }
+  function resetWhenText(r) {
+    if (!r) return "-";
+    return resetIsPrecise(r) ? fmtLocal(r.at).slice(5) : t("resetTimeUnknown");
+  }
+  function resetSourceText(r) {
+    if (!r) return "";
+    if (r.source === "snapshot" && r.bracket) {
+      if (resetIsPrecise(r)) {
+        return `${t("resetSourceSnapshot")} · ${fmtLocal(r.bracket.fromAt).slice(5)} ${pct(r.bracket.fromUsed)} → ${fmtLocal(
+          r.bracket.toAt,
+        ).slice(5)} ${pct(r.bracket.toUsed)}`;
+      }
+      return `${t("resetSourceSnapshot")} · ${t("resetDetectedAt", { v: fmtLocal(r.at).slice(5) })}`;
+    }
+    return `${t("resetSourceLedger")} · ${t("resetDetectedAt", { v: fmtLocal(r.at).slice(5) })}`;
+  }
 
   // 功能显示名。WORK 的子服务（Search/Fetch/Media）由 title 体现，不单独分类。
   const FEAT_NAMES = {
@@ -629,9 +976,31 @@
     .kqc-input { width:56px; font-size:12px; padding:2px 4px; border:1px solid #ddd; border-radius:4px; }
     .kqc-pill { display:inline-block; background:#efeaff; color:#5b40cc; border-radius:10px;
       padding:1px 8px; font-size:11px; margin-left:6px; }
+    .kqc-cycleinfo { flex:1 1 260px; min-width:220px; line-height:1.55; padding:2px 0; }
+    .kqc-ci-main { font-size:12px; color:#3a3a3a; font-weight:600; }
+    .kqc-ci-sub { font-size:11px; color:#9a9a9a; }
+    .kqc-ci-reset { font-size:11px; color:#a56b00; }
+    .kqc-cum { font-size:12px; color:#3a3a3a; background:#f4f1ff; border-radius:6px;
+      padding:4px 8px; margin:5px 0 2px; font-weight:600; }
+    .kqc-sublabel { font-size:11px; color:#777; margin-top:6px; }
+    .kqc-resets { background:#fff8e8; border:1px solid #f0d9a8; border-radius:8px;
+      padding:8px 10px; margin-bottom:10px; }
+    .kqc-resets-title { font-size:12px; font-weight:600; color:#8a5a00; margin-bottom:2px; }
+    .kqc-reset-row { display:flex; flex-wrap:wrap; gap:4px 10px; align-items:center;
+      font-size:11px; color:#555; padding:4px 0; border-top:1px dashed #eedcb8; }
+    .kqc-reset-row:first-of-type { border-top:none; }
+    .kqc-reset-row.is-off { color:#aaa; }
+    .kqc-reset-tag { background:#fff0c2; color:#8a5a00; border-radius:8px; padding:1px 6px; }
+    .kqc-reset-row.is-off .kqc-reset-tag { background:#eee; color:#999; }
+    .kqc-reset-amt { font-family:monospace; font-weight:600; color:#c0392b; }
+    .kqc-reset-row.is-off .kqc-reset-amt { color:#aaa; text-decoration:line-through; }
+    .kqc-reset-src { color:#999; }
+    .kqc-shown { font-size:11px; color:#555; }
+    .kqc-reset-warn { font-size:11px; color:#b26a00; margin-top:4px; }
   `);
 
-  const state = { entries: [], cycles: {}, viewCycle: null, rows: 300 };
+  const state = { entries: [], cycles: {}, resets: [], viewCycle: null, rows: 300 };
+  pageWindow.__KQC.state = state;
 
   // v 是 0–1 的比例，费率是"元 / 1%"（可选项），所以要 ×100
   const money = (v, feat) => {
@@ -658,12 +1027,22 @@
       ...new Set([
         ...state.entries.map((e) => cycleOf(e.timestamp)),
         ...Object.keys(state.cycles),
+        ...state.resets.map((r) => r.cycle),
         curCycle,
       ].filter(Boolean)),
     ].sort().reverse();
     const view = state.viewCycle || curCycle;
     const isCurrent = view === curCycle;
     const closed = state.cycles[view] || null;
+
+    const viewResets = state.resets
+      .filter((r) => r.cycle === view)
+      .sort((a, b) => (a.at < b.at ? -1 : 1));
+    const activeResets = viewResets.filter((r) => !r.dismissed);
+    const totalGranted = activeResets.reduce((a, r) => a + (Number(r.amount) || 0), 0);
+    const totalCodeGranted = activeResets.reduce((a, r) => a + (Number(r.codeAmount) || 0), 0);
+    const hasReset = activeResets.length > 0;
+    const effectiveLimit = 1 + totalGranted;
 
     const viewEntries = state.entries.filter((e) => (view === "ALL" ? true : cycleOf(e.timestamp) === view) && isDone(e));
 
@@ -683,28 +1062,33 @@
     const localNonCode = featKeys.reduce((a, k) => a + featSums[k], 0);
     const localCode = viewEntries.filter((e) => e.feature === "CODING").reduce((a, e) => a + e.ratio, 0);
 
-    // 周期总量只认官方：当期用实时值，历史周期用快照里固化的终值。
-    // 没有快照的历史周期一律显示"未捕获"，绝不拿本地合计冒充总量。
-    const officialTotal = isCurrent ? usedRatio : closed ? closed.used : null;
-    const codeVal = isCurrent
-      ? codeOfficial != null
-        ? codeOfficial
-        : localCode
-      : closed && closed.code != null
-        ? closed.code
-        : localCode;
-    const codeIsOfficial = isCurrent ? codeOfficial != null : !!(closed && closed.code != null);
+    // 官方读数只认接口：当期用实时值，历史周期用快照里固化的期末读数。
+    // 有重置时，本周期累计消耗 = 官方当前读数 + 历次实际降幅；总额度 = 100% + 降幅之和。
+    // 没有重置时 totalGranted=0，这两个值和旧逻辑完全一致。
+    const officialTotal = isCurrent ? usedRatio : closed && closed.used != null ? Number(closed.used) : null;
+    const codeBase = isCurrent ? codeOfficial : closed && closed.code != null ? Number(closed.code) : null;
+    const codeIsOfficial = codeBase != null;
+    const codeVal = codeBase != null ? codeBase + totalCodeGranted : localCode;
+    const totalConsumed = officialTotal != null ? officialTotal + totalGranted : null;
     const localSum = codeVal + localNonCode;
     const localSumForCompleteness = localCode + localNonCode;
-    const completeness = isCurrent && officialTotal ? Math.min(1, localSumForCompleteness / officialTotal) : null;
+    // 用户手动取消掉唯一的重置后，主面板回到"官方当前 vs 本地累计"的旧口径；
+    // 这时差异通常很大，不把完整度/尾差显示成正常值，只在重置记录里提醒。
+    const dismissedMismatch =
+      !hasReset && viewResets.length > 0 && officialTotal != null && localSum - officialTotal > 0.005;
+    const completeness =
+      totalConsumed && !dismissedMismatch ? Math.min(1, localSumForCompleteness / totalConsumed) : null;
+    const cumulativeRate = totalConsumed != null && effectiveLimit > 0 ? totalConsumed / effectiveLimit : null;
 
     const moneyOn = rateCode() != null || rateOther() != null;
 
     const featLines = [];
+    if (hasReset) featLines.push(`<div class="kqc-sublabel">${esc(t("cumulativeBreakdown"))}</div>`);
     {
       const m = money(codeVal, "CODING");
+      const codeSrc = codeIsOfficial ? (hasReset ? t("officialCumulative") : t("official")) : t("local");
       featLines.push(
-        `<div class="kqc-label" style="margin-top:2px">${t("ofWhich")} <b>${esc(featName("CODING"))}</b> <b>${pct(codeVal)}</b>（${esc(codeIsOfficial ? t("official") : t("local"))}）${m ? " · " + m : ""}</div>`,
+        `<div class="kqc-label" style="margin-top:2px">${t("ofWhich")} <b>${esc(featName("CODING"))}</b> <b>${pct(codeVal)}</b>（${esc(codeSrc)}）${m ? " · " + m : ""}</div>`,
       );
     }
     for (const k of featKeys) {
@@ -713,14 +1097,14 @@
         `<div class="kqc-label" style="margin-top:2px">${esc(featName(k))} <b>${pct(featSums[k])}</b>${m ? " · " + m : ""}</div>`,
       );
     }
-    if (officialTotal != null) {
-      const miss = officialTotal - localSum;
+    if (totalConsumed != null) {
+      const miss = totalConsumed - localSum;
       if (miss > 0.0005) {
         const m = money(miss, "OTHER");
         featLines.push(
           `<div class="kqc-label" style="margin-top:2px">${esc(t("notCaptured"))} <b>${pct(miss)}</b>${m ? " · " + m : ""}</div>`,
         );
-      } else if (Math.abs(miss) > 1e-6) {
+      } else if (Math.abs(miss) > 1e-6 && !dismissedMismatch) {
         // 官方总量与明细本身就有 ±0.02~0.03pp 的尾差，不能当成漏抓
         featLines.push(
           `<div class="kqc-label" style="margin-top:2px;color:#aaa">${esc(t("tailDiff", { v: (miss > 0 ? "+" : "") + (miss * 100).toFixed(2) + "%" }))}</div>`,
@@ -734,9 +1118,11 @@
     }
 
     const showTotalMoney =
-      rateCode() != null && rateOther() != null && (officialTotal != null || view === "ALL");
-    const totalMoney =
-      showTotalMoney ? codeVal * 100 * rateCode() + Math.max(0, (officialTotal != null ? officialTotal : localSum) - codeVal) * 100 * rateOther() : null;
+      rateCode() != null && rateOther() != null && (totalConsumed != null || view === "ALL");
+    const totalMoney = showTotalMoney
+      ? codeVal * 100 * rateCode() +
+        Math.max(0, (totalConsumed != null ? totalConsumed : localSum) - codeVal) * 100 * rateOther()
+      : null;
 
     const earliest = state.entries.length
       ? state.entries.reduce((m, e) => (e.timestamp < m ? e.timestamp : m), state.entries[0].timestamp)
@@ -745,21 +1131,44 @@
       ? `<div class="kqc-label" style="margin-top:6px">${t("localStats", { n: state.entries.length, d: fmtLocal(earliest).slice(0, 10) })}</div>`
       : "";
 
-    // 大数字
+    // 大数字：没有重置时保持旧版（只显示官方读数）；
+    // 有重置时，当前周期主数字仍是官方当前值，历史周期主数字换成"本周期累计"。
     let bigLabel;
     let bigValue;
     let bigSuffix = "";
     if (view === "ALL") {
       bigLabel = t("cycleAll");
       bigValue = pct(localSumForCompleteness);
+    } else if (hasReset && totalConsumed != null) {
+      if (isCurrent) {
+        bigLabel = t("monthlyUsedOfficialCurrent");
+        bigValue = pct(officialTotal);
+        if (total) bigSuffix = ' <span style="font-weight:400;font-size:12px;color:#666">(' + n(total.used) + "/" + n(total.limit) + ")</span>";
+      } else {
+        bigLabel = t("cycleCumulativeLabel");
+        bigValue = pct(totalConsumed);
+      }
     } else if (officialTotal != null) {
-      bigLabel = isCurrent ? t("monthlyUsed") : cycleLabel(view);
+      bigLabel = isCurrent ? t("monthlyUsed") : cycleLabel(view, state.cycles, curCycle, sub);
       bigValue = pct(officialTotal);
       if (isCurrent && total) bigSuffix = ' <span style="font-weight:400;font-size:12px;color:#666">(' + n(total.used) + "/" + n(total.limit) + ")</span>";
     } else {
-      bigLabel = cycleLabel(view);
+      bigLabel = cycleLabel(view, state.cycles, curCycle, sub);
       bigValue = `<span style="font-size:15px;color:#c0392b">${esc(t("noRecord"))}</span>`;
     }
+
+    const cumulativeLine =
+      hasReset && totalConsumed != null
+        ? `<div class="kqc-cum">${esc(
+            isCurrent
+              ? t("cycleCumulative", { used: pct(totalConsumed), limit: pct(effectiveLimit), rate: pct(cumulativeRate) })
+              : t("cycleLimitOnly", { limit: pct(effectiveLimit), n: activeResets.length }),
+          )}</div>`
+        : "";
+    const officialEndLine =
+      hasReset && !isCurrent && officialTotal != null
+        ? `<div class="kqc-ci-sub" style="margin-top:2px">${esc(t("officialEndValue", { v: pct(officialTotal) }))}</div>`
+        : "";
 
     const shown = viewEntries.slice().sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1)).slice(0, state.rows);
     const rows = shown
@@ -778,8 +1187,18 @@
       `<option value="ALL" ${view === "ALL" ? "selected" : ""}>${t("cycleAll")} (${state.entries.length})</option>`,
       ...cycleKeys.map((k) => {
         const c = state.cycles[k];
-        const tag = c ? ` · ${t("cycleEndValue", { v: pct(c.used) })}` : "";
-        return `<option value="${esc(k)}" ${view === k ? "selected" : ""}>${cycleLabel(k)}${esc(tag)}</option>`;
+        let tag = "";
+        if (c) {
+          if ((c.resetCount || 0) > 0 || (c.totalGranted || 0) > 0) {
+            tag = ` · ${t("cycleTotalTag", {
+              used: pct(c.totalConsumed != null ? c.totalConsumed : c.used),
+              limit: pct(c.effectiveLimit != null ? c.effectiveLimit : 1),
+            })}`;
+          } else {
+            tag = ` · ${t("cycleEndValue", { v: pct(c.used) })}`;
+          }
+        }
+        return `<option value="${esc(k)}" ${view === k ? "selected" : ""}>${cycleLabel(k, state.cycles, curCycle, sub)}${esc(tag)}</option>`;
       }),
     ].join("");
 
@@ -805,14 +1224,55 @@
     const canaryBanner = pageWindow.__KQC.streamUsageDetected ? `<div class="kqc-canary">⚠ ${esc(t("canary"))}</div>` : "";
     const win5Line = h5 ? t("quotaUnits", { u: n(h5.used), l: n(h5.limit), r: n(h5.remaining) }) : "";
     const win7Line = weekly ? t("quotaUnits", { u: n(weekly.used), l: n(weekly.limit), r: n(weekly.remaining) }) : "";
-    const resetAt =
+    const nextBillingIso =
       (sub && sub.subscription && (sub.subscription.nextBillingTime || sub.subscription.currentEndTime)) ||
-      (bal && bal.expireTime);
+      (bal && bal.expireTime) ||
+      null;
+    const latestActive = activeResets[activeResets.length - 1] || null;
+    const cycleInfo =
+      view === "ALL"
+        ? ""
+        : `<div class="kqc-cycleinfo">
+            <div class="kqc-ci-main">${esc(t("cycleRange", { v: cycleRangeText(view, state.cycles, curCycle, sub) }))}</div>
+            ${latestActive ? `<div class="kqc-ci-reset">${esc(t("lastSuspectedReset", { v: resetWhenText(latestActive) }))}</div>` : ""}
+            <div class="kqc-ci-sub">${esc(
+              isCurrent
+                ? t("nextBilling", { v: fmtLocal(nextBillingIso).slice(5) })
+                : t("cycleEndLine", { v: fmtLocal(cycleBounds(view, state.cycles, curCycle, sub).end).slice(5) }),
+            )}</div>
+          </div>`;
+
+    const resetRow = (r) => {
+      const off = !!r.dismissed;
+      const amt = (Number(r.amount) || 0) * 100;
+      const codeAmt = (Number(r.codeAmount) || 0) * 100;
+      return `<div class="kqc-reset-row${off ? " is-off" : ""}">
+        <span>${esc(resetWhenText(r))}</span>
+        <span class="kqc-reset-tag">${esc(off ? t("resetCancelled") : t("suspectedReset"))}</span>
+        <span class="kqc-reset-amt">${esc(t("resetAmount", { v: amt.toFixed(2) + "pp" }))}</span>
+        ${codeAmt > 0 ? `<span class="kqc-reset-src">${esc(t("resetCodeAmount", { v: codeAmt.toFixed(2) + "pp" }))}</span>` : ""}
+        <span class="kqc-reset-src">${esc(resetSourceText(r))}</span>
+        <button class="kqc-btn2" data-reset-key="${esc(r.key)}" data-reset-restore="${off ? "1" : "0"}">${esc(
+          off ? t("restoreResetBtn") : t("cancelResetBtn"),
+        )}</button>
+      </div>`;
+    };
+    // 取消后主面板回到"无重置"口径；如果本地明细仍明显高于官方，给一条提醒，不自动加回。
+    const dismissedWarn = dismissedMismatch
+      ? `<div class="kqc-reset-warn">${esc(t("resetDismissedWarn", { v: pct(localSum - officialTotal) }))}</div>`
+      : "";
+    const resetBlock = viewResets.length
+      ? `<div class="kqc-resets">
+          <div class="kqc-resets-title">${esc(t("resetLog"))}${activeResets.length ? ` · ${esc(t("resetCount", { n: activeResets.length }))}` : ""}</div>
+          ${viewResets.map(resetRow).join("")}
+          ${dismissedWarn}
+        </div>`
+      : "";
 
     root.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
         <div style="font-size:18px;font-weight:600">${t("title")} <span style="font-size:12px;color:#999">v${GM_info.script.version}</span>
-          <span class="kqc-pill">${esc(cycleLabel(curCycle))}</span></div>
+          <span class="kqc-pill">${esc(cycleLabel(curCycle, state.cycles, curCycle, sub))}</span></div>
         <div style="display:flex;gap:8px;align-items:center">
           <button class="kqc-btn2" id="kqc-export-json">${t("exportJson")}</button>
           <button class="kqc-btn2" id="kqc-export-csv">${t("exportCsv")}</button>
@@ -824,10 +1284,11 @@
       <div class="kqc-grid">
         <div class="kqc-card"><div class="kqc-label">${bigLabel}</div>
           <div class="kqc-value">${bigValue}${bigSuffix}</div>
+          ${cumulativeLine}
+          ${officialEndLine}
           ${featLines.join("")}
           ${showTotalMoney ? `<div class="kqc-label" style="margin-top:8px;border-top:1px solid #eee;padding-top:6px">合计 ≈ <b>¥${totalMoney.toFixed(2)}</b>${completeness != null ? ` · ${esc(t("completeness", { v: Math.round(completeness * 100) + "%" }))}` : ""}</div>` : completeness != null ? `<div class="kqc-label" style="margin-top:8px;border-top:1px solid #eee;padding-top:6px">${esc(t("completeness", { v: Math.round(completeness * 100) + "%" }))}</div>` : ""}
           ${localStatsLine}
-          <div class="kqc-label" style="margin-top:2px">${t("resetAt", { v: fmtLocal(resetAt).slice(5) })}</div>
         </div>
         <div class="kqc-card">
           <div class="kqc-label">${t("planLabel")}${planBadge}</div>
@@ -850,8 +1311,10 @@
           ${win7Line ? `<div class="kqc-label" style="margin-top:2px">${win7Line}</div>` : ""}
           <div class="kqc-label" style="margin-top:2px">${t("resetAt", { v: fmtLocal(weekly?.resetTime || stats?.ratelimitCode7d?.resetTime).slice(5) })}</div></div>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;gap:10px">
-        <div style="font-weight:600;font-size:13px">${t("ledger")}</div>
+      ${resetBlock}
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:12px;flex-wrap:wrap">
+        <div style="font-weight:600;font-size:13px;white-space:nowrap">${t("ledger")}</div>
+        ${cycleInfo}
         <div style="display:flex;gap:10px;align-items:center;margin-left:auto">
           <span class="kqc-est">${esc(t("cycle"))}</span>
           <select id="kqc-cycle" style="font-size:12px;max-width:300px">${cycleOptions}</select>
@@ -864,11 +1327,16 @@
         </table>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-        <div class="kqc-est">${esc(t("shownRows", { a: shown.length, b: viewEntries.length }))}</div>
+        <div class="kqc-shown">${esc(t("shownRows", { a: shown.length, b: viewEntries.length }))}</div>
         ${viewEntries.length > shown.length ? `<button class="kqc-btn2" id="kqc-more">${t("loadMore")}</button>` : ""}
       </div>
       <div class="kqc-foot">${t("footer")}</div>`;
     root.style.display = "flex";
+
+    root.querySelectorAll("[data-reset-key]").forEach((btn) => {
+      btn.onclick = () =>
+        toggleReset(btn.getAttribute("data-reset-key"), btn.getAttribute("data-reset-restore") === "1", stats, usages, sub);
+    });
 
     document.getElementById("kqc-close").onclick = () => (root.style.display = "none");
     document.getElementById("kqc-refresh").onclick = () => run(true);
@@ -927,6 +1395,22 @@
       };
   }
 
+  // 取消/恢复只改 dismissed 标记，不删除快照、流水或事件本身。
+  async function toggleReset(key, restore, stats, usages, sub) {
+    const ev = state.resets.find((r) => r.key === key);
+    if (!ev) return;
+    if (!restore && !pageWindow.confirm(t("cancelResetConfirm"))) return;
+    ev.dismissed = !restore;
+    ev.dismissedAt = new Date().toISOString();
+    try {
+      await dbPut(S_RESETS, ev);
+      await refreshCycleRecord(ev.cycle);
+    } catch (e) {
+      debug("toggleReset err: " + e);
+    }
+    renderPanel(stats, usages, sub);
+  }
+
   // ---------- export ----------
   function csvCell(v, guardFormula) {
     let s = String(v ?? "");
@@ -940,6 +1424,7 @@
       const entries = (await dbGetAll(S_ACTIONS)).sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
       const snaps = (await dbGetAll(S_SNAPSHOTS)).sort((a, b) => (a.ts < b.ts ? 1 : -1));
       const cycles = await dbGetAll(S_CYCLES);
+      const resets = await dbGetAll(S_RESETS);
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
       if (kind === "json") {
         const json = {
@@ -948,6 +1433,7 @@
           rates: { codePerPct: rateCode(), otherPerPct: rateOther() },
         plan: pageWindow.localStorage.getItem(PLAN_KEY) || null,
           cycles,
+          resets,
           entries,
           snapshots: snaps,
         };
@@ -971,7 +1457,7 @@
         )
         .join("\n");
       if (kind === "csv") download(`kimi-quota-${stamp}.csv`, head + body, "text/csv");
-      alert(t("exported", { n: entries.length, m: snaps.length }));
+      alert(t("exported", { n: entries.length, m: snaps.length, r: resets.length }));
     } catch (e) {
       alert(t("err") + ": " + e.message);
     }
@@ -1010,6 +1496,10 @@
     }
   }
 
+  // 调试/回归入口：在页面控制台可手动重扫历史快照
+  pageWindow.__KQC.bootstrapGrants = bootstrapGrantsFromSnapshots;
+  pageWindow.__KQC.syncGrants = syncGrantEventsFromSnapshots;
+
   // ---------- main ----------
   async function run(full = true) {
     const btn = document.getElementById("kqc-btn");
@@ -1037,9 +1527,25 @@
         ...cyclesArr.map((c) => c.cycleStart),
         ...snapsAll.map((x) => x.cycleStart),
       ]);
+      const bal = stats && stats.subscriptionBalance;
+      const usedRatio = bal ? Number(bal.amountUsedRatio) || 0 : null;
+      const codeOfficial = bal && bal.kimiCodeUsedRatio != null ? Number(bal.kimiCodeUsedRatio) : null;
+      const curCycle = cycleOf(
+        (sub && sub.subscription && sub.subscription.currentStartTime) || new Date().toISOString(),
+      );
+      const cycleEndIso =
+        (sub && sub.subscription && (sub.subscription.nextBillingTime || sub.subscription.currentEndTime)) || null;
+      // 先回推历史快照里的跳水（升级用户的最新快照可能已经是 0%），再做流水差额校正。
+      if (curCycle) {
+        await syncGrantEventsFromSnapshots(snapsAll, curCycle, cycleEndIso).catch((e) => debug("sync err: " + e));
+      }
+      // 快照没抓到（页面当时没开）时，用本地流水合计与官方读数的差额补一条低置信度事件。
+      if (curCycle) await reconcileGrants(curCycle, usedRatio, codeOfficial, entries).catch((e) => debug("reconcile err: " + e));
+      const resetsArr = await dbGetAll(S_RESETS).catch(() => []);
       state.entries = entries;
       state.cycles = {};
       for (const c of cyclesArr) state.cycles[c.cycle] = c;
+      state.resets = resetsArr;
       state.viewCycle = null;
       state.rows = 300;
       renderPanel(stats, usages, sub);
@@ -1065,6 +1571,9 @@
     // 抓取时机：页面打开立即（含分页回填）、切回页面立即、前台每 60 秒
     captureLedger(true);
     pollStats(true);
+    // 页面重新打开时，历史快照里可能已经有"重置前 → 重置后"的跳水；
+    // 等首轮快照写完后回推一次，不依赖用户点开面板。
+    setTimeout(() => bootstrapGrantsFromSnapshots(), 3000);
     setInterval(() => {
       captureLedger();
       pollStats();
