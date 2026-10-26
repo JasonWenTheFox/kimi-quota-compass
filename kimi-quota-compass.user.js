@@ -567,14 +567,18 @@
     for (const cycle of Object.keys(byCycle)) {
       const own = byCycle[cycle].sort((a, b) => a.at - b.at);
       const fallbackEnd = cycle === curCycle ? curCycleEnd : null;
+      let cycleFound = false;
       for (let i = 1; i < own.length; i++) {
         const prev = own[i - 1];
         const cur = own[i];
         if (!isGrantDrop(prev, cur)) continue;
         if (isNearCycleBoundary(cur, fallbackEnd)) continue;
         await recordGrantEvent(prev, cur).catch((e) => debug("sync grant err: " + e));
+        cycleFound = true;
         found++;
       }
+      // 如果这个周期已经关账，补上/校正 totalGranted 等字段（只改计算字段，不删记录）
+      if (cycleFound) await refreshCycleRecord(cycle).catch((e) => debug("refresh cycle err: " + e));
     }
     if (found) debug(`grant sync: ${found} drop(s) checked`);
     return found;
@@ -1405,6 +1409,8 @@
     try {
       await dbPut(S_RESETS, ev);
       await refreshCycleRecord(ev.cycle);
+      const rec = await dbGet(S_CYCLES, ev.cycle);
+      if (rec) state.cycles[ev.cycle] = rec;
     } catch (e) {
       debug("toggleReset err: " + e);
     }
@@ -1541,10 +1547,13 @@
       }
       // 快照没抓到（页面当时没开）时，用本地流水合计与官方读数的差额补一条低置信度事件。
       if (curCycle) await reconcileGrants(curCycle, usedRatio, codeOfficial, entries).catch((e) => debug("reconcile err: " + e));
-      const resetsArr = await dbGetAll(S_RESETS).catch(() => []);
+      const [resetsArr, cyclesFresh] = await Promise.all([
+        dbGetAll(S_RESETS).catch(() => []),
+        dbGetAll(S_CYCLES).catch(() => cyclesArr),
+      ]);
       state.entries = entries;
       state.cycles = {};
-      for (const c of cyclesArr) state.cycles[c.cycle] = c;
+      for (const c of cyclesFresh) state.cycles[c.cycle] = c;
       state.resets = resetsArr;
       state.viewCycle = null;
       state.rows = 300;
