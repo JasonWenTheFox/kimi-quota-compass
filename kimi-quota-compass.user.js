@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Kimi Quota Compass
 // @name:zh-CN   Kimi 用量罗盘
-// @namespace    https://github.com/JasonWenTheFox
-// @version      0.9.0
+// @namespace    https://github.com/jasonwentf
+// @version      0.9.1
 // @description  Kimi membership quota panel: monthly pool, Kimi Code 5h/7d windows, per-action ledger with full-cycle backfill, cycle snapshots, suspected official reset grants, and CSV/JSON export
 // @description:zh-CN  Kimi 会员用量面板：月度额度池、Kimi Code 5小时/7天窗口、逐条额度流水（支持全周期回填、周期快照、疑似官方重置与额度增量、导出）
 // @author       JW
@@ -13,8 +13,8 @@
 // @run-at       document-start
 // @grant        GM_addStyle
 // @grant        unsafeWindow
-// @homepageURL  https://github.com/JasonWenTheFox/kimi-quota-compass
-// @supportURL   https://github.com/JasonWenTheFox/kimi-quota-compass/issues
+// @homepageURL  https://github.com/jasonwentf/kimi-quota-compass
+// @supportURL   https://github.com/jasonwentf/kimi-quota-compass/issues
 // @license      MIT
 // ==/UserScript==
 
